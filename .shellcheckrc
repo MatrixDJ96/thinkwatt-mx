@@ -1,0 +1,4 @@
+# Present so the edit hook has a config to key on; the same two settings the gate passes.
+# Severity is not an rc directive (man shellcheck, RC FILES), so it stays on the command line.
+external-sources=true
+source-path=SCRIPTDIR
