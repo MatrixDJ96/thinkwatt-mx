@@ -1,0 +1,15 @@
+# Lenovo's firmware and everything extracted from it: proprietary, never published, regenerable
+# from the public LVFS cabinet as docs/firmware.md describes.
+/research/fw/out/
+/research/fw/*.cab
+/research/fw/firmware.bin
+/research/fw/firmware.metainfo.xml
+/research/fw/ifr/*.ifr.txt
+/research/fw/smm/work/
+/research/fw/smm/disasm/
+
+# Build output of kmods/build.sh: one tree per kernel release.
+/kmods/[0-9]*/
+
+# The compiled catalogues: widget/build-locale.sh makes them from widget/po at install time.
+/widget/package/contents/locale/
