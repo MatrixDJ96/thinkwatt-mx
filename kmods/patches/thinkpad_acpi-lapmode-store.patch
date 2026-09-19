@@ -1,0 +1,78 @@
+SPDX-License-Identifier: GPL-2.0-only
+
+--- a/drivers/platform/x86/lenovo/thinkpad_acpi.c
++++ b/drivers/platform/x86/lenovo/thinkpad_acpi.c
+@@ -10190,12 +10190,17 @@
+ {
+ 	int output, err;
+ 
+-	*present = false;
+ 	err = dytc_command(DYTC_CMD_GET, &output);
+-	if (err)
++	if (err) {
++		*present = false;
+ 		return err;
++	}
+ 
+-	*present = true; /*If we get his far, we have lapmode support*/
++	/*
++	 * Set only now: a reader of dytc_lapmode during the command above would
++	 * otherwise see the sensor absent and read an empty attribute.
++	 */
++	*present = true;
+ 	*state = output & BIT(DYTC_GET_LAPMODE_BIT) ? true : false;
+ 	return 0;
+ }
+@@ -10256,7 +10261,12 @@
+ 		return sysfs_emit(buf, "%d\n", lap_state);
+ 	return sysfs_emit(buf, "\n");
+ }
+-static DEVICE_ATTR_RO(dytc_lapmode);
++
++/* Defined with the DYTC set commands below, which it needs. */
++static ssize_t dytc_lapmode_store(struct device *dev,
++				  struct device_attribute *attr,
++				  const char *buf, size_t count);
++static DEVICE_ATTR_RW(dytc_lapmode);
+ 
+ static ssize_t palmsensor_show(struct device *dev,
+ 					struct device_attribute *attr,
+@@ -10534,6 +10544,38 @@
+  * dytc_profile_set: Function to register with platform_profile
+  * handler. Sets current platform profile.
+  */
++/*
++ * Write 0 to leave lap mode, 1 to enter it, through the same DYTC set command
++ * the firmware's own EC query issues. The EC keeps its own opinion, so the
++ * change holds until the EC decides again; the completion event refreshes
++ * lap_state and notifies the attribute as for any other change.
++ */
++static ssize_t dytc_lapmode_store(struct device *dev,
++				  struct device_attribute *attr,
++				  const char *buf, size_t count)
++{
++	bool wanted;
++	int output, err;
++
++	if (!has_lapsensor)
++		return -ENODEV;
++
++	err = kstrtobool(buf, &wanted);
++	if (err)
++		return err;
++
++	err = mutex_lock_interruptible(&dytc_mutex);
++	if (err)
++		return err;
++	err = dytc_command(wanted ? DYTC_ENABLE_CQL : DYTC_DISABLE_CQL, &output);
++	mutex_unlock(&dytc_mutex);
++	if (err)
++		return err;
++
++	lapsensor_refresh();
++	return count;
++}
++
+ static int dytc_profile_set(struct device *dev,
+ 			    enum platform_profile_option profile)
+ {

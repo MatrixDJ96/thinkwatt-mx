@@ -19,6 +19,20 @@ The EC's criterion is unknown. Lifting, pushing and knocking the machine did not
 mode, and neither did hours of load on a hot chassis. The kernel documentation says lap mode
 returns to 0 after about five minutes without movement; that does not describe this model.
 
+## How ThinkWatt MX clears it
+
+The patched `thinkpad_acpi` accepts writes to `dytc_lapmode` ([`kernel.md`](kernel.md)).
+Writing `0` sends `DYTC(0x000F1001)`, the call `_Q3C` makes when the EC leaves lap mode. It
+takes effect within three seconds:
+
+| `dytc_lapmode` | STAPM    | PPT slow | skin target |
+| -------------- | -------- | -------- | ----------- |
+| `1`, before    | 14.000 W | 25.000 W | 31 °C       |
+| `0`, after     | 25.891 W | 33.000 W | 37 °C       |
+
+The EC keeps `CQLS` at 1 after the clear. It can raise query `0x3C` again at any time, so the
+clear is not a setting.
+
 ## What does not work
 
 | attempt                      | result                                                                            |

@@ -42,6 +42,15 @@ amdgpu: Mode2 reset failed!
 amdgpu: GPU Recovery Failed: -62
 ```
 
+## The rule
+
+Nothing in ThinkWatt MX writes to the SMU except through `amd_pmf`:
+
+| task            | how                                                        |
+| --------------- | ---------------------------------------------------------- |
+| skin target     | `amd_pmf`'s `stt_skin_temp_apu` ([`kernel.md`](kernel.md)) |
+| limits, metrics | `amd_pmf`'s `power_limits` and `metrics`, read on demand   |
+
 ## Recognizing a hang
 
 The load average climbs to about 16 while only one process is runnable. The rest are kernel

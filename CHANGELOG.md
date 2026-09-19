@@ -8,6 +8,7 @@ the design, so the same mistake is not made twice.
 | assumption                                                 | finding                                                                                                  |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `amd_pmf` sends the limits on this machine                 | this BIOS uses the OS power slider: `amd_pmf` only notifies, the DSDT sends the table                    |
+| after a release the firmware restores its target by itself | at rest it did not for ten minutes; the patched driver restores it when `0` is written                   |
 | reading the SMU with `ryzenadj` on a timer is safe         | three concurrent callers hung the SMU and the GPU ([`docs/smu.md`](docs/smu.md))                         |
 | one `ryzenadj` caller is safe                              | it collided with the kernel's own writes on a charger change                                             |
 | waiting 5 s after the last power event avoids collisions   | the next event can land during the call; nothing in userspace writes to the SMU now                      |

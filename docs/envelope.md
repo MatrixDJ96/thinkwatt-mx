@@ -11,6 +11,9 @@ and lowers it as the chassis warms.
 
 The target is the one input that moves STAPM. The firmware sets it to 37 °C in `performance`.
 
+`skin_temp` in `metrics` regularly reads above `stt_apu`. This is normal: the target is where
+the SMU starts removing power, not a temperature the skin cannot exceed.
+
 ## The firmware tables
 
 The DSDT holds `STTS`, twenty tables of twelve SMU parameters. `DSTT(n)` sends one table to the
@@ -32,3 +35,5 @@ No table allows more than 22 W of STAPM, so no BIOS option gives more.
 The firmware sends a table again on several events: a profile change, a power-source change, a
 battery change and a lap mode change. The EC query `_Q3E` also calls `DSTT` at times that are
 not known.
+
+Writing `0` to `stt_skin_temp_apu` restores the value the SMU held before the first write.
