@@ -18,6 +18,12 @@
 - **Skin cooling.** The 10-minute wait between runs works, but the middle of the skin's cooling
   curve was never sampled ([`docs/measurements.md`](docs/measurements.md)).
 
+## Service
+
+- **CPU use.** The service takes about 0.4% of one core, mostly the applet's `ReadFigures` call
+  every 500 ms (about 1.4 ms each). Lower it in the next release
+  ([`docs/dbus.md`](docs/dbus.md)).
+
 ## Distribution
 
 - Build the two drivers in the `bazzite-mx` image, and blacklist `ryzen_smu` there.

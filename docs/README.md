@@ -1,5 +1,9 @@
 # Documentation
 
+## Using ThinkWatt MX
+
+- [Usage](usage.md): the Plasma applet and the command line
+
 ## Reference
 
 - [D-Bus interface](dbus.md): properties, methods, errors and permissions

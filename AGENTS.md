@@ -1,7 +1,7 @@
 # thinkwatt-mx — power management for the ThinkPad L14 Gen 6 AMD
 
-A root service on the system bus (`bin/thinkwatt-mxd`, Python with PyGObject) and two patched
-kernel drivers built per release. Its subject is one machine, the
+A root service on the system bus (`bin/thinkwatt-mxd`, Python with PyGObject), two patched
+kernel drivers built per release, and a KDE Plasma 6 applet. Its subject is one machine, the
 reference ThinkPad (type 21S9, BIOS `R2UET33W`, Fedora Atomic with the OGC kernel): every
 measurement in `docs/` was taken there.
 
@@ -24,6 +24,9 @@ kmods/build.sh                       # drivers for the running kernel into kmods
 - Commands in `bin/` and `tools/` have no extension; other scripts keep theirs.
 - Everything in the tree is English, including every line a script prints. A refusal goes to
   stderr as `FAIL:` and names the offending value.
+- Applet strings are English `i18n` sources. After a string change, run
+  `widget/build-locale.sh` and translate every new entry of `widget/po/it.po`, leaving no
+  `fuzzy` or `#~` entries.
 - A design assumption that measurement disproved gets a row in `CHANGELOG.md`; open work goes
   to `ROADMAP.md`.
 - A guard or a test case exists only for a state a host reaches.
@@ -37,6 +40,13 @@ kmods/build.sh                       # drivers for the running kernel into kmods
   the GPU down (`docs/smu.md`).
 - `kmods/swap.sh` leaves a driver that is already the patched one loaded: restarting
   `thinkwatt-mx-kmods` after a change to `kmods/patches/` keeps the old module until a reboot.
+- The QML D-Bus module wraps every value: the applet reads through `plain()` and refreshes with
+  `updateAll()`.
+- A QML D-Bus map write crashes `plasmashell` when the property is missing from the service's
+  introspection, as it is for `tuned-ppd`. The profile is written with `Properties.Set`,
+  `(ssv)` and a `DBus.variant`.
+- Inside `fullRepresentation` and `compactRepresentation`, an `Item` property shadows an outer
+  id of the same name: no id may be named `state` or `scale`.
 - `tools/tp-bench-power` and `tools/tp-bench-soc` load every core and lag the desktop; the
   protocol is in `docs/measurements.md`.
 

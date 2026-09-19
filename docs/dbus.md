@@ -31,7 +31,7 @@ TuneD sets the CPU governor and the GPU level on every profile switch. `CpuMode`
 then change without a `PropertiesChanged` signal.
 
 The profile is read-only here. It belongs to `tuned-ppd`: write it to
-`net.hadess.PowerProfiles`.
+`net.hadess.PowerProfiles`, as the applet does.
 
 A refused write returns one of these errors, prefixed with `io.github.matrixdj96.ThinkwattMX.`:
 
@@ -69,7 +69,8 @@ Every property write is checked against the polkit action
 | no active session (`sudo -u nobody`) | `Error.NotAuthorized`  |
 
 The bus policy in `policy/` lets only root own the name and anyone send to it. The rule also
-lets an active `wheel` user start, stop and restart `thinkwatt-mx.service`.
+lets an active `wheel` user start, stop and restart `thinkwatt-mx.service`, which is how the
+applet's service button works.
 
 ## Events
 

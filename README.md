@@ -3,7 +3,8 @@
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 
 Power management for the ThinkPad L14 Gen 6 AMD on Linux. ThinkWatt MX raises the sustained
-power limit, drives the fan with a temperature curve and removes the lap mode power cap.
+power limit, drives the fan with a temperature curve and removes the lap mode power cap, all
+from a KDE Plasma applet.
 
 ## Results
 
@@ -17,7 +18,7 @@ Full load in the `performance` profile, stock firmware against ThinkWatt MX:
 
 ## Documentation
 
-The D-Bus interface and how it works are in [`docs/`](docs/README.md).
+Usage, the D-Bus interface and how it works are in [`docs/`](docs/README.md).
 
 ## License
 
