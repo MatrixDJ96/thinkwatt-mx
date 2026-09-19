@@ -16,6 +16,14 @@ the design, so the same mistake is not made twice.
 | `DYTC_CMD_RESET` clears lap mode for 30 minutes            | on this machine it keeps lap mode and turns DYTC off                                                     |
 | raising PPT slow above 33 W gives more power safely        | it holds the power but the skin keeps heating: the control loop is open                                  |
 
+## Measurements
+
+| assumption                                  | finding                                                                                             |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| the raised target gives +30%, later +27%    | one was a single early sample, the other used a wrong baseline; the gain is +21% (3149 to 3818 MHz) |
+| the clock decays 2% during a run            | the fan was not rising; with a working curve the clock holds 3818 MHz for the whole run             |
+| `IntelligentCoolingBoost=Enable` gives +20% | the `Disable` baseline did not reproduce; the effect is unmeasured                                  |
+
 ## Service
 
 | assumption                                              | finding                                                                                          |

@@ -16,6 +16,22 @@ ThinkWatt MX writes a higher one through the patched `amd_pmf` attribute `stt_sk
 `skin_temp` in `metrics` regularly reads above `stt_apu`. This is normal: the target is where
 the SMU starts removing power, not a temperature the skin cannot exceed.
 
+## Results
+
+Measured under `stress-ng --cpu 16 --cpu-method matrixprod`, 150 s per run
+([`measurements.md`](measurements.md)):
+
+|                 | stock    | target 47, fan curve | target 47, fan `max` |
+| --------------- | -------- | -------------------- | -------------------- |
+| sustained power | 22.00 W  | 33.00 W              | 33.00 W              |
+| all-core clock  | 3149 MHz | 3818 MHz             | 3834 MHz             |
+| Tctl, steady    | 67.6 °C  | 76–79 °C             | 72.0 °C              |
+| skin            | 42.4 °C  | 44.1 °C              | 43.0 °C              |
+| fan             | 2477 rpm | 3205–4830 rpm        | 4800 rpm             |
+
+The raised target gives 21% more sustained clock for 11 W. Its cost is the skin temperature,
+about 2 °C higher. Running the fan at full speed lowers Tctl but adds no power.
+
 ## Why 33 W
 
 With the target at 47 °C the limits read STAPM 43 W, PPT fast 43 W and PPT slow 33 W. The

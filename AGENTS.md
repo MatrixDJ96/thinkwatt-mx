@@ -21,7 +21,7 @@ kmods/build.sh                       # drivers for the running kernel into kmods
   machine facts to auto-memory.
 - Bash starts with `#!/usr/bin/env bash` and `set -euo pipefail`, Python with a module
   docstring; lines stop at 100 columns.
-- Commands in `bin/` have no extension; other scripts keep theirs.
+- Commands in `bin/` and `tools/` have no extension; other scripts keep theirs.
 - Everything in the tree is English, including every line a script prints. A refusal goes to
   stderr as `FAIL:` and names the offending value.
 - A design assumption that measurement disproved gets a row in `CHANGELOG.md`; open work goes
@@ -37,10 +37,12 @@ kmods/build.sh                       # drivers for the running kernel into kmods
   the GPU down (`docs/smu.md`).
 - `kmods/swap.sh` leaves a driver that is already the patched one loaded: restarting
   `thinkwatt-mx-kmods` after a change to `kmods/patches/` keeps the old module until a reboot.
+- `tools/tp-bench-power` and `tools/tp-bench-soc` load every core and lag the desktop; the
+  protocol is in `docs/measurements.md`.
 
 ## Boundaries
 
-- `systemctl` on the units and any write to the service or
+- `systemctl` on the units, the benches and any write to the service or
   to sysfs act on the running machine's kernel, fan and power limits: run them only on the
   owner's go. The read-only `busctl get-property` and `ReadFigures`
   calls need none.
