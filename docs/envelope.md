@@ -10,9 +10,21 @@ STAPM is not a fixed number. The SMU recomputes it continuously from a skin temp
 and lowers it as the chassis warms.
 
 The target is the one input that moves STAPM. The firmware sets it to 37 °C in `performance`.
+ThinkWatt MX writes a higher one through the patched `amd_pmf` attribute `stt_skin_temp_apu`
+([`kernel.md`](kernel.md)). The power then settles wherever the chassis reaches the new target.
 
 `skin_temp` in `metrics` regularly reads above `stt_apu`. This is normal: the target is where
 the SMU starts removing power, not a temperature the skin cannot exceed.
+
+## Why 33 W
+
+With the target at 47 °C the limits read STAPM 43 W, PPT fast 43 W and PPT slow 33 W. The
+sustained power stops exactly on PPT slow, which the skin target does not move.
+
+PPT slow can be raised, but that breaks the control loop. A run with PPT slow at 35 W and the
+target at 55 °C held 35 W, while the skin rose from 39.9 to 47.3 °C in 180 s and was still
+rising. At a target the skin never reaches, the SMU never cuts power. At 47 °C the skin
+settles, and 33 W is where it settles. ThinkWatt MX therefore changes the target only.
 
 ## The firmware tables
 
@@ -34,6 +46,9 @@ No table allows more than 22 W of STAPM, so no BIOS option gives more.
 
 The firmware sends a table again on several events: a profile change, a power-source change, a
 battery change and a lap mode change. The EC query `_Q3E` also calls `DSTT` at times that are
-not known.
+not known ([`../ROADMAP.md`](../ROADMAP.md)).
+
+The service writes the target again after each event it can see ([`dbus.md`](dbus.md#events)).
+A table sent by `_Q3E` stays in force until the next such event.
 
 Writing `0` to `stt_skin_temp_apu` restores the value the SMU held before the first write.

@@ -1,0 +1,632 @@
+#!/usr/bin/env python3
+"""The power envelope of the ThinkPad L14 Gen 6 AMD as one service on the system bus: the raised
+skin-temperature target, the fan curve, the CPU and GPU modes, the DYTC lap mode cleared.
+
+Usage: started by thinkwatt-mx.service, as root
+
+Exit status: 0 stopped by SIGTERM, 1 a prerequisite is missing or the bus name was lost.
+
+One process, one GLib main loop, no thread. The name is io.github.matrixdj96.ThinkwattMX, the
+object /io/github/matrixdj96/ThinkwattMX, the interface the same as the name: four writable
+properties (Ceiling, FanLevel, CpuMode, GpuMode), two read-only ones (Profile, LapMode), three
+methods that read sysfs on demand (ReadFigures, ReadLimits, ReadMetrics). Every property write
+is authorised by polkit, action io.github.matrixdj96.ThinkwattMX.set, checked against the
+caller's bus name; reads ask nothing.
+
+Both knobs are attributes of the patched drivers of docs/kernel.md, and nothing here touches the
+SMU by any other way. The target goes to amd_pmf's stt_skin_temp_apu, which sends it on the
+driver's own mailbox; 0 there puts the firmware's table back. Ceiling lives in this process:
+it dies with it and with the reboot, is refused under any profile but performance, is zeroed
+when the profile leaves performance, and is written again after every kernel event that may
+have pushed the firmware's table over it: a profile change, the lap mode flip, a power-source
+or battery uevent. Lap mode is cleared by writing 0 to dytc_lapmode; the EC keeps its own
+opinion, so the clear is a remedy re-issued on every event, and the target follows the flip.
+
+The events come from inotify (Gio file monitors, no sysfs file held open: tuned-ppd takes the
+Fn key only when nobody has platform_profile open) and from the kernel uevent socket. A profile
+event is read once the burst is over: each change notifies twice, one per handler, and reading
+inside the burst opens the file at the moment tuned-ppd is deciding whether the change came from
+the kernel, which makes it read the value the handlers have not yet replaced and set that back.
+
+The fan is the one timer: Tctl sampled from k10temp every second, a decision on the peak of
+three samples, up at once and down with two degrees of hysteresis, the EC watchdog re-armed at
+120 s at every decision so a dead service hands the fan back to the EC. FanLevel picks what the
+loop writes: `curve` the curve, a fixed level that level, overridden by full speed from 90 C
+until Tctl is back under 85 C, `auto` hands the fan to the EC and the loop idles. This is the
+only writer of /proc/acpi/ibm/fan.
+
+The two inotify watches are on the attributes' inodes: a driver swapped by hand while the
+service runs takes its events with it, and `systemctl restart thinkwatt-mx` re-arms them.
+"""
+
+import glob
+import os
+import signal
+import socket
+import sys
+
+import gi
+
+gi.require_version("Gio", "2.0")
+gi.require_version("GLibUnix", "2.0")
+from gi.repository import Gio, GLib, GLibUnix  # noqa: E402
+
+BUS_NAME = "io.github.matrixdj96.ThinkwattMX"
+OBJECT_PATH = "/io/github/matrixdj96/ThinkwattMX"
+INTERFACE = BUS_NAME
+ACTION = f"{BUS_NAME}.set"
+ERROR_INVALID_VALUE = f"{BUS_NAME}.Error.InvalidValue"
+ERROR_PROFILE = f"{BUS_NAME}.Error.Profile"
+ERROR_FAILED = f"{BUS_NAME}.Error.Failed"
+ERROR_NOT_AUTHORIZED = f"{BUS_NAME}.Error.NotAuthorized"
+PROPERTIES = "org.freedesktop.DBus.Properties"
+POLKIT = "org.freedesktop.PolicyKit1"
+POLKIT_PATH = "/org/freedesktop/PolicyKit1/Authority"
+POLKIT_AUTHORITY = f"{POLKIT}.Authority"
+
+INTROSPECTION = f"""
+<node>
+  <interface name="{INTERFACE}">
+    <property name="Ceiling" type="u" access="readwrite"/>
+    <property name="FanLevel" type="s" access="readwrite"/>
+    <property name="CpuMode" type="s" access="readwrite"/>
+    <property name="GpuMode" type="s" access="readwrite"/>
+    <property name="Profile" type="s" access="read"/>
+    <property name="LapMode" type="b" access="read"/>
+    <method name="ReadFigures"><arg type="a{{sv}}" name="figures" direction="out"/></method>
+    <method name="ReadLimits"><arg type="a{{sv}}" name="limits" direction="out"/></method>
+    <method name="ReadMetrics"><arg type="a{{sv}}" name="metrics" direction="out"/></method>
+  </interface>
+</node>
+"""
+
+LAPMODE = "/sys/devices/platform/thinkpad_acpi/dytc_lapmode"
+MODEL = "/sys/class/dmi/id/product_family"
+PLATFORM_PROFILE = "/sys/firmware/acpi/platform_profile"
+PMF = "/sys/bus/platform/devices/AMDI0102:00"
+SKIN_TARGET = f"{PMF}/stt_skin_temp_apu"
+CPUFREQ = "/sys/devices/system/cpu/cpu*/cpufreq"
+CPU0 = "/sys/devices/system/cpu/cpu0/cpufreq"
+DRM = "/sys/class/drm/card*/device"
+HWMON = "/sys/class/hwmon/hwmon*"
+FAN = "/proc/acpi/ibm/fan"
+# The stock target is 37; above 60 the skin outruns the governor and the loop is open.
+CEILING_RANGE = range(37, 61)
+# `auto` is the EC's own control, `curve` the loop's.
+FAN_LEVELS = ("curve", "auto", "max", *"01234567")
+CPU_MODES = ("performance", "balanced", "powersave")
+GPU_MODES = ("auto", "low", "high", *"012")
+# Milliseconds of quiet after a platform_profile notification before the file is read.
+PROFILE_SETTLE = 500
+# linux/netlink.h; the socket module does not name it. Group 1 is the kernel's own broadcast.
+NETLINK_KOBJECT_UEVENT = 15
+
+FULL_SPEED = "full-speed"
+# Where full-speed sits when levels compare: above 7.
+FULL_SPEED_RANK = 8
+HYSTERESIS = 2
+# A forced level 0..7 gives way to full speed from FLOOR, and comes back below FLOOR_RELEASE.
+FLOOR = 90
+FLOOR_RELEASE = 85
+WATCHDOG = 120
+SAMPLES = 3
+# Measured rpm per level: 0, 2070, 2310, 2489, 2684, 2840, 3092, 3246, then 4838 for
+# full-speed, the EC's disengaged mode. The regulated levels are 154 to 252 rpm apart, so three
+# degrees each spreads them over the band the machine actually works in; the one step that
+# moves real air is the last, and it lands at 80 C, where a sustained 33 W settles.
+CURVE = ((80, FULL_SPEED), (77, "7"), (74, "6"), (71, "5"), (68, "4"), (65, "3"), (62, "2"),
+         (58, "1"))
+
+
+class Refused(Exception):
+    """A write not done; the name and message go back to the caller as the D-Bus error."""
+
+    def __init__(self, name, message):
+        super().__init__(message)
+        self.name = name
+
+
+def log(message):
+    print(message, file=sys.stderr if message.startswith("FAIL") else sys.stdout, flush=True)
+
+
+def read_attribute(path):
+    with open(path) as handle:
+        return handle.read().strip()
+
+
+def write_attribute(path, value):
+    with open(path, "w") as handle:
+        handle.write(f"{value}\n")
+
+
+def hwmon_path(wanted):
+    for path in glob.glob(HWMON):
+        if read_attribute(f"{path}/name") == wanted:
+            return path
+    return None
+
+
+def curve_level(t):
+    for threshold, level in CURVE:
+        if t >= threshold:
+            return level
+    return "0"
+
+
+# The wanted level: the forced one when there is one, the curve's otherwise.
+def wanted(forced, t):
+    if forced == "max":
+        return FULL_SPEED
+    if forced.isdigit():
+        return forced
+    return curve_level(t)
+
+
+def rank(level):
+    if level == FULL_SPEED:
+        return FULL_SPEED_RANK
+    return int(level)
+
+
+# The level to write at Tctl t, or None to keep the current one. Rising is immediate: a fan that
+# lags a climbing Tctl is the failure that matters. Falling goes to the level the curve asks for
+# when handed HYSTERESIS degrees of grace, so the fan settles one band above the edge it crossed
+# and the next degree up does not raise it again. A forced level passes on its own, because
+# `wanted` then ignores the temperature it is handed.
+def decide(forced, t, current):
+    if forced.isdigit() and t >= (FLOOR_RELEASE if current == FULL_SPEED else FLOOR):
+        return None if current == FULL_SPEED else FULL_SPEED
+    up = wanted(forced, t)
+    if current is None or rank(up) > rank(current):
+        return up
+    down = wanted(forced, t + HYSTERESIS)
+    if rank(down) < rank(current):
+        return down
+    return None
+
+
+# The line to log for a power_supply uevent of the adapter or the battery, None otherwise. The
+# battery one matters because the EC's _Q4B pushes the STT table on every battery change.
+def power_change(message):
+    fields = message.split(b"\0")
+    values = dict(field.decode(errors="replace").split("=", 1) for field in fields if b"=" in field)
+    if values.get("SUBSYSTEM") != "power_supply":
+        return None
+    name = values.get("POWER_SUPPLY_NAME")
+    if name == "AC":
+        return "power: AC" if values.get("POWER_SUPPLY_ONLINE") == "1" else "power: battery"
+    if name == "BAT0":
+        return f"battery: {values.get('POWER_SUPPLY_STATUS', '?')}"
+    return None
+
+
+# `key=value` words, the form of amd_pmf's power_limits and metrics, as a{sv}: integers as
+# int32, anything with a point as double.
+def parse_words(text):
+    out = {}
+    for word in text.split():
+        key, value = word.split("=", 1)
+        if "." in value:
+            out[key] = GLib.Variant("d", float(value))
+        else:
+            out[key] = GLib.Variant("i", int(value))
+    return out
+
+
+class Service:
+    def __init__(self, connection):
+        self.connection = connection
+        self.ceiling = 0
+        # Whether the driver holds our target now: released under another profile, on a stop,
+        # and when the ceiling closes.
+        self.holding = False
+        self.fan_level = "curve"
+        self.profile = read_attribute(PLATFORM_PROFILE)
+        self.lapmode = False
+        self.profile_timer = None
+        self.level = None
+        self.samples = []
+        self.cpu_snapshot = None
+        self.model = read_attribute(MODEL)
+        self.k10temp = hwmon_path("k10temp")
+        self.amdgpu = hwmon_path("amdgpu")
+        self.drm = os.path.dirname(glob.glob(f"{DRM}/gpu_busy_percent")[0])
+        self.monitors = []
+        for path, handler in ((LAPMODE, self.on_lapmode), (PLATFORM_PROFILE, self.on_profile)):
+            monitor = Gio.File.new_for_path(path).monitor_file(Gio.FileMonitorFlags.NONE, None)
+            monitor.connect("changed", handler)
+            self.monitors.append(monitor)
+        self.uevents = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, NETLINK_KOBJECT_UEVENT)
+        self.uevents.bind((0, 1))
+        # A charger burst is several uevents at once; the default buffer drops the tail.
+        self.uevents.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
+        GLib.io_add_watch(self.uevents.fileno(), GLib.PRIORITY_DEFAULT, GLib.IO_IN, self.on_uevent)
+        GLib.timeout_add_seconds(1, self.fan_tick)
+        info = Gio.DBusNodeInfo.new_for_xml(INTROSPECTION).interfaces[0]
+        connection.register_object_with_closures2(OBJECT_PATH, info, self.on_method_call, None,
+                                                  None)
+        # A lap mode already in force announces nothing: it is read once, here.
+        self.on_lapmode()
+        log(f"lap mode {int(self.lapmode)}, profile {self.profile}")
+
+    # Sysfs writes -------------------------------------------------------------------------
+
+    # Writes the target, or 0 to hand the table back; the driver answers at once on its mailbox.
+    def write_target(self, target):
+        try:
+            write_attribute(SKIN_TARGET, target)
+        except OSError as error:
+            log(f"FAIL: {SKIN_TARGET} <- {target}: {error.strerror}")
+            return False
+        self.holding = bool(target)
+        log(f"target {target} written" if target else "target released")
+        return True
+
+    def release_target(self):
+        if self.holding:
+            self.write_target(0)
+
+    # A kernel event: the firmware may have pushed its table, and an open ceiling is written
+    # again. Not while a lap mode clear is in flight: its flip lands here once the table stands.
+    def push_ceiling(self):
+        if self.ceiling and self.profile == "performance" and not self.lapmode:
+            self.write_target(self.ceiling)
+
+    def write_fan(self, command):
+        try:
+            write_attribute(FAN, command)
+        except OSError as error:
+            log(f"FAIL: {FAN} <- {command}: {error.strerror}")
+            return False
+        return True
+
+    def write_cpufreq(self, name, value):
+        for path in glob.glob(f"{CPUFREQ}/{name}"):
+            write_attribute(path, value)
+
+    # Events ---------------------------------------------------------------------------------
+
+    def announce(self, changed):
+        if not changed:
+            return
+        self.connection.emit_signal(None, OBJECT_PATH, PROPERTIES, "PropertiesChanged",
+                                    GLib.Variant("(sa{sv}as)", (INTERFACE, changed, [])))
+
+    # One flip of dytc_lapmode raises several inotify events, the clear written here among
+    # them: only a change of the value is acted on, so each flip costs one target write.
+    def on_lapmode(self, *_):
+        lapmode = read_attribute(LAPMODE) == "1"
+        if lapmode == self.lapmode:
+            return
+        self.lapmode = lapmode
+        self.announce({"LapMode": GLib.Variant("b", lapmode)})
+        if lapmode:
+            log("lap mode 1: clearing")
+            try:
+                write_attribute(LAPMODE, 0)
+            except OSError as error:
+                log(f"FAIL: {LAPMODE} <- 0: {error.strerror}")
+            return
+        log("lap mode 0")
+        self.push_ceiling()
+
+    # GLib follows every burst with a CHANGES_DONE_HINT two seconds on: a second read for nothing.
+    def on_profile(self, _monitor, _file, _other, event):
+        if event != Gio.FileMonitorEvent.CHANGED:
+            return
+        if self.profile_timer is not None:
+            GLib.source_remove(self.profile_timer)
+        self.profile_timer = GLib.timeout_add(PROFILE_SETTLE, self.read_profile)
+
+    def read_profile(self):
+        self.profile_timer = None
+        profile = read_attribute(PLATFORM_PROFILE)
+        changed = {}
+        if profile != self.profile:
+            log(f"profile: {profile}")
+            self.profile = profile
+            changed["Profile"] = GLib.Variant("s", profile)
+        if self.ceiling and profile != "performance":
+            log("profile left performance: ceiling closed")
+            self.release_target()
+            self.ceiling = 0
+            changed["Ceiling"] = GLib.Variant("u", 0)
+        self.announce(changed)
+        self.push_ceiling()
+        return False
+
+    # A callback that raises is removed by GLib for good: every read here is guarded.
+    def on_uevent(self, *_):
+        try:
+            change = power_change(self.uevents.recv(8192))
+        except OSError as error:
+            log(f"FAIL: uevent socket: {error.strerror}")
+            return True
+        if change is not None:
+            log(change)
+            self.push_ceiling()
+        return True
+
+    # Tctl swings by more than a level's width between consecutive reads, so the level follows
+    # the peak of the window: a spike must not be averaged away and a lull must not drop the fan.
+    def fan_tick(self):
+        if self.fan_level == "auto":
+            if self.level != "auto" and self.write_fan("level auto") \
+                    and self.write_fan("watchdog 0"):
+                self.level = "auto"
+                self.samples = []
+                log("fan handed to the EC")
+            return True
+        if self.level == "auto":
+            self.level = None
+        try:
+            tctl = int(read_attribute(f"{self.k10temp}/temp1_input"))
+        except (OSError, ValueError) as error:
+            log(f"FAIL: k10temp: {error}")
+            return True
+        self.samples.append(round(tctl / 1000))
+        if len(self.samples) < SAMPLES:
+            return True
+        t = max(self.samples)
+        self.samples = []
+        level = decide(self.fan_level, t, self.level)
+        if level is not None and self.write_fan(f"level {level}"):
+            self.level = level
+            floor = self.fan_level.isdigit() and level == FULL_SPEED
+            log(f"Tctl {t} C -> level {level}" + (" (thermal floor)" if floor else ""))
+        self.write_fan(f"watchdog {WATCHDOG}")
+        return True
+
+    # Properties -----------------------------------------------------------------------------
+
+    def cpu_mode(self):
+        governor = read_attribute(f"{CPU0}/scaling_governor")
+        epp = read_attribute(f"{CPU0}/energy_performance_preference")
+        if governor == "performance":
+            return "performance"
+        if governor == "powersave" and epp == "balance_performance":
+            return "balanced"
+        if governor == "powersave" and epp == "power":
+            return "powersave"
+        return f"{governor}/{epp}"
+
+    def gpu_mode(self):
+        level = read_attribute(f"{self.drm}/power_dpm_force_performance_level")
+        if level != "manual":
+            return level
+        for line in read_attribute(f"{self.drm}/pp_dpm_sclk").splitlines():
+            if line.endswith("*"):
+                return line.split(":")[0]
+        return level
+
+    def properties(self):
+        return {
+            "Ceiling": GLib.Variant("u", self.ceiling),
+            "FanLevel": GLib.Variant("s", self.fan_level),
+            "CpuMode": GLib.Variant("s", self.cpu_mode()),
+            "GpuMode": GLib.Variant("s", self.gpu_mode()),
+            "Profile": GLib.Variant("s", self.profile),
+            "LapMode": GLib.Variant("b", self.lapmode),
+        }
+
+    def set_ceiling(self, value):
+        if value != 0 and value not in CEILING_RANGE:
+            raise Refused(ERROR_INVALID_VALUE, f"Ceiling must be 0 or {CEILING_RANGE.start}.."
+                          f"{CEILING_RANGE[-1]}, not {value}")
+        if value and self.profile != "performance":
+            raise Refused(ERROR_PROFILE,
+                          f"Ceiling needs the performance profile, not {self.profile}")
+        if value and not self.lapmode and not self.write_target(value):
+            raise Refused(ERROR_FAILED, f"{SKIN_TARGET} refused {value}")
+        if not value and self.holding and not self.write_target(0):
+            raise Refused(ERROR_FAILED, f"{SKIN_TARGET} refused the release")
+        self.ceiling = value
+
+    def set_fan_level(self, value):
+        if value not in FAN_LEVELS:
+            raise Refused(ERROR_INVALID_VALUE,
+                          f"FanLevel must be curve, auto, max or 0..7, not {value}")
+        self.fan_level = value
+
+    # The governor goes first: the kernel refuses a preference written under `performance`. Only
+    # the powersave governor, the normal one and not a slow one, leaves the preference free to
+    # say how hard the firmware pushes.
+    def set_cpu_mode(self, value):
+        if value not in CPU_MODES:
+            raise Refused(ERROR_INVALID_VALUE,
+                          f"CpuMode must be performance, balanced or powersave, not {value}")
+        if value == "performance":
+            self.write_cpufreq("scaling_governor", "performance")
+            return
+        self.write_cpufreq("scaling_governor", "powersave")
+        self.write_cpufreq("energy_performance_preference",
+                           "balance_performance" if value == "balanced" else "power")
+
+    def set_gpu_mode(self, value):
+        if value not in GPU_MODES:
+            raise Refused(ERROR_INVALID_VALUE,
+                          f"GpuMode must be auto, low, high or 0..2, not {value}")
+        level = f"{self.drm}/power_dpm_force_performance_level"
+        if value in ("0", "1", "2"):
+            write_attribute(level, "manual")
+            write_attribute(f"{self.drm}/pp_dpm_sclk", value)
+            return
+        write_attribute(level, value)
+
+    def set_property(self, name, value):
+        # GDBus has already refused a name, a type or an access the introspection denies.
+        setter = {"Ceiling": self.set_ceiling, "FanLevel": self.set_fan_level,
+                  "CpuMode": self.set_cpu_mode, "GpuMode": self.set_gpu_mode}[name]
+        setter(value)
+        log(f"{name} = {value}")
+        self.announce({name: self.properties()[name]})
+
+    # Methods --------------------------------------------------------------------------------
+
+    # CPU load is a difference, so the previous jiffy counters are kept between two calls; the
+    # first call has nothing to subtract and prints no key.
+    def cpu_busy(self):
+        with open("/proc/stat") as handle:
+            fields = [int(field) for field in handle.readline().split()[1:]]
+        total = sum(fields)
+        busy = total - fields[3] - fields[4]
+        previous = self.cpu_snapshot
+        self.cpu_snapshot = (busy, total)
+        if previous is None or total <= previous[1]:
+            return None
+        return round(100 * (busy - previous[0]) / (total - previous[1]))
+
+    def read_figures(self):
+        freqs = [int(read_attribute(path)) for path in glob.glob(f"{CPUFREQ}/scaling_cur_freq")]
+        fan = dict(line.split(":", 1) for line in read_attribute(FAN).splitlines())
+        figures = {
+            "tctl": GLib.Variant("d", int(read_attribute(f"{self.k10temp}/temp1_input")) / 1000),
+            "freq": GLib.Variant("u", round(sum(freqs) / len(freqs) / 1000)),
+            "cores": GLib.Variant("u", len(freqs)),
+            "model": GLib.Variant("s", self.model),
+            "gpu_temp": GLib.Variant("d", int(read_attribute(f"{self.amdgpu}/temp1_input")) / 1000),
+            "gpu_freq": GLib.Variant(
+                "u", int(read_attribute(f"{self.amdgpu}/freq1_input")) // 10**6),
+            "gpu_busy": GLib.Variant("u", int(read_attribute(f"{self.drm}/gpu_busy_percent"))),
+            "soc_power": GLib.Variant(
+                "d", int(read_attribute(f"{self.amdgpu}/power1_average")) / 10**6),
+            "fan_level": GLib.Variant("s", fan["level"].strip()),
+            "governor": GLib.Variant("s", read_attribute(f"{CPU0}/scaling_governor")),
+            "epp": GLib.Variant("s", read_attribute(f"{CPU0}/energy_performance_preference")),
+        }
+        busy = self.cpu_busy()
+        if busy is not None:
+            figures["cpu_busy"] = GLib.Variant("u", busy)
+        # The EC answers 65535 while a level change is in flight: a sentinel, not a reading.
+        rpm = int(fan["speed"])
+        if rpm != 65535:
+            figures["fan_rpm"] = GLib.Variant("u", rpm)
+        return figures
+
+    # The bus ----------------------------------------------------------------------------------
+
+    # A sysfs read that fails is the caller's error, never a call left hanging: GLib drops
+    # the exception and the client waits out its timeout.
+    def on_method_call(self, connection, sender, _path, interface, method, parameters,
+                       invocation):
+        try:
+            self.dispatch(sender, interface, method, parameters, invocation)
+        except (OSError, ValueError, IndexError, KeyError) as error:
+            log(f"FAIL: {method}: {error}")
+            invocation.return_dbus_error(ERROR_FAILED, str(error))
+
+    def dispatch(self, sender, interface, method, parameters, invocation):
+        if interface == PROPERTIES and method == "Get":
+            name = parameters.unpack()[1]
+            invocation.return_value(GLib.Variant("(v)", (self.properties()[name],)))
+        elif interface == PROPERTIES and method == "GetAll":
+            invocation.return_value(GLib.Variant("(a{sv})", (self.properties(),)))
+        elif interface == PROPERTIES and method == "Set":
+            _, name, value = parameters.unpack()
+            self.authorize(sender, invocation, name, value)
+        else:
+            readers = {"ReadFigures": self.read_figures,
+                       "ReadLimits": lambda: parse_words(read_attribute(f"{PMF}/power_limits")),
+                       "ReadMetrics": lambda: parse_words(read_attribute(f"{PMF}/metrics"))}
+            # GDBus answers UnknownMethod itself, against the introspection, before this runs.
+            invocation.return_value(GLib.Variant("(a{sv})", (readers[method](),)))
+
+    # Every write goes to polkit first, with the caller's bus name as the subject; the answer
+    # comes back on the main loop and the write happens there.
+    def authorize(self, sender, invocation, name, value):
+        subject = ("system-bus-name", {"name": GLib.Variant("s", sender)})
+        self.connection.call(POLKIT, POLKIT_PATH, POLKIT_AUTHORITY, "CheckAuthorization",
+                             GLib.Variant("((sa{sv})sa{ss}us)", (subject, ACTION, {}, 1, "")),
+                             GLib.VariantType("((bba{ss}))"), Gio.DBusCallFlags.NONE, -1, None,
+                             self.on_authorized, (sender, invocation, name, value))
+
+    def on_authorized(self, connection, result, data):
+        sender, invocation, name, value = data
+        try:
+            authorized = connection.call_finish(result).unpack()[0][0]
+        except GLib.Error as error:
+            log(f"FAIL: polkit: {error.message}")
+            invocation.return_dbus_error(ERROR_NOT_AUTHORIZED, error.message)
+            return
+        if not authorized:
+            log(f"refused: {sender} is not authorized for {ACTION}")
+            invocation.return_dbus_error(ERROR_NOT_AUTHORIZED, f"{sender} is not authorized")
+            return
+        try:
+            self.set_property(name, value)
+        except Refused as refusal:
+            log(f"refused: {refusal}")
+            invocation.return_dbus_error(refusal.name, str(refusal))
+            return
+        except OSError as error:
+            log(f"FAIL: {name} = {value}: {error.strerror}")
+            invocation.return_dbus_error(ERROR_FAILED, f"{name}: {error.strerror}")
+            return
+        invocation.return_value(None)
+
+    def release(self):
+        self.release_target()
+        self.write_fan("level auto")
+        self.write_fan("watchdog 0")
+        log("stopped: ceiling closed, fan handed to the EC")
+
+
+def main():
+    if os.geteuid() != 0:
+        log("FAIL: root required")
+        return 1
+    for path in (SKIN_TARGET, LAPMODE):
+        if not os.access(path, os.W_OK):
+            log(f"FAIL: {path} is not writable: the patched drivers are not loaded "
+                "(thinkwatt-mx-kmods)")
+            return 1
+    try:
+        fan = read_attribute(FAN)
+    except OSError as error:
+        log(f"FAIL: {FAN}: {error.strerror}: thinkpad_acpi is not loaded")
+        return 1
+    if "commands" not in fan:
+        log("FAIL: fan control is off: kernel argument thinkpad_acpi.fan_control=1 missing")
+        return 1
+    for name in ("k10temp", "amdgpu"):
+        if hwmon_path(name) is None:
+            log(f"FAIL: no {name} hwmon")
+            return 1
+    if not glob.glob(f"{DRM}/gpu_busy_percent"):
+        log(f"FAIL: no {DRM}/gpu_busy_percent: amdgpu is not up")
+        return 1
+
+    loop = GLib.MainLoop()
+    service = None
+    lost = False
+
+    def on_bus_acquired(connection, _name):
+        nonlocal service, lost
+        try:
+            service = Service(connection)
+        except (OSError, ValueError, IndexError) as error:
+            lost = True
+            log(f"FAIL: start: {error}")
+            loop.quit()
+
+    def on_name_lost(_connection, name):
+        nonlocal lost
+        lost = True
+        log(f"FAIL: the bus name {name} is not ours: is the bus policy installed?")
+        loop.quit()
+
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        GLibUnix.signal_add(GLib.PRIORITY_HIGH, signum, loop.quit)
+    Gio.bus_own_name(Gio.BusType.SYSTEM, BUS_NAME, Gio.BusNameOwnerFlags.NONE, on_bus_acquired,
+                     lambda *_: log("listening"), on_name_lost)
+    try:
+        loop.run()
+    finally:
+        if service is not None:
+            service.release()
+    return 1 if lost else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

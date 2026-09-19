@@ -1,6 +1,8 @@
 # The kernel patches
 
-ThinkWatt MX patches two in-tree drivers.
+ThinkWatt MX patches two in-tree drivers. The service writes the skin target and lap mode only
+through the sysfs attributes these patches add, so the skin target reaches the SMU through
+`amd_pmf`, the driver the firmware expects ([`smu.md`](smu.md)).
 
 - `kmods/patches/amd-pmf-stt-override.patch` adds three attributes to `amd_pmf`:
   `stt_skin_temp_apu`, `power_limits` and `metrics`.
@@ -58,7 +60,7 @@ given. It needs the kernel headers and the network:
 SELinux rule must label them
 `modules_object_t`. Without that label the kernel refuses to load them.
 
-At boot `thinkwatt-mx-kmods.service` runs `swap.sh` before TuneD. For each
+At boot `thinkwatt-mx-kmods.service` runs `swap.sh` before TuneD and the service. For each
 driver still in its stock version, `swap.sh` unloads it (with `amdxdna`, which holds `amd_pmf`)
 and loads the patched copy with the options `modprobe` would pass, including
 `thinkpad_acpi.fan_control=1`. When `tuned-ppd` is already running, it also restores

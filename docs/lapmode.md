@@ -31,7 +31,16 @@ takes effect within three seconds:
 | `0`, after     | 25.891 W | 33.000 W | 37 °C       |
 
 The EC keeps `CQLS` at 1 after the clear. It can raise query `0x3C` again at any time, so the
-clear is not a setting.
+clear is not a setting. The service writes `0` again each time `dytc_lapmode` changes to `1`.
+It also reads the file once at start, because a lap mode already in force sends no event.
+
+The service writes the skin target again when `dytc_lapmode` returns to `0`. By then the DSDT
+has already sent its table, so the target is not overwritten.
+
+To test the service, force lap mode with
+`echo 1 | sudo tee /sys/devices/platform/thinkpad_acpi/dytc_lapmode`. The write goes through
+the same `DYTC` path as the EC's event. The service should log `lap mode 1: clearing`, then
+`lap mode 0`.
 
 ## What does not work
 

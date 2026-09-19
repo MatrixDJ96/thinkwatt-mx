@@ -50,6 +50,11 @@ Nothing in ThinkWatt MX writes to the SMU except through `amd_pmf`:
 | --------------- | ---------------------------------------------------------- |
 | skin target     | `amd_pmf`'s `stt_skin_temp_apu` ([`kernel.md`](kernel.md)) |
 | limits, metrics | `amd_pmf`'s `power_limits` and `metrics`, read on demand   |
+| fan loop        | Tctl from `k10temp`                                        |
+| SoC power       | amdgpu's `power1_average`                                  |
+
+The service never reads the SMU on a timer. It writes the target only while `Ceiling` is set,
+once per kernel event.
 
 ## Recognizing a hang
 

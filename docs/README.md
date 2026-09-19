@@ -1,5 +1,10 @@
 # Documentation
 
+## Reference
+
+- [D-Bus interface](dbus.md): properties, methods, errors and permissions
+- [Fan control](fan.md): the curve, fixed levels and measured fan speeds
+
 ## How it works
 
 - [The power envelope](envelope.md): which firmware limit binds

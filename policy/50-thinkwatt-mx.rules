@@ -1,0 +1,16 @@
+// An active user of the wheel group sets the service's properties without a password, and the
+// widget's service switch may start, stop and restart thinkwatt-mx.service, no other unit and
+// no other verb. Anyone else authenticates as an administrator, per the action's defaults.
+polkit.addRule(function(action, subject) {
+    if (!subject.isInGroup("wheel") || !subject.active) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (action.id == "io.github.matrixdj96.ThinkwattMX.set") {
+        return polkit.Result.YES;
+    }
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "thinkwatt-mx.service" &&
+        ["start", "stop", "restart"].indexOf(action.lookup("verb")) >= 0) {
+        return polkit.Result.YES;
+    }
+});

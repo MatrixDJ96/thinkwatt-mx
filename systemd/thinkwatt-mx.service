@@ -1,0 +1,20 @@
+[Unit]
+Description=ThinkWatt MX: power ceiling, fan curve and lap mode of a ThinkPad AMD, on the system bus
+Documentation=https://github.com/MatrixDJ96/thinkwatt-mx/blob/main/docs/dbus.md
+ConditionPathExists=@PREFIX@/kmods/%v/amd-pmf.ko
+Requires=thinkwatt-mx-kmods.service
+After=thinkwatt-mx-kmods.service
+
+[Service]
+Type=dbus
+BusName=io.github.matrixdj96.ThinkwattMX
+ExecStart=@PREFIX@/bin/thinkwatt-mxd
+# A process that dies without its own release: the target back to the firmware, the fan to the EC.
+ExecStopPost=/bin/sh -c 'echo 0 > /sys/bus/platform/devices/AMDI0102:00/stt_skin_temp_apu; echo level auto > /proc/acpi/ibm/fan'
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target
