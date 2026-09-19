@@ -3,15 +3,20 @@
 A root service on the system bus (`bin/thinkwatt-mxd`, Python with PyGObject), two patched
 kernel drivers built per release, and a KDE Plasma 6 applet. Its subject is one machine, the
 reference ThinkPad (type 21S9, BIOS `R2UET33W`, Fedora Atomic with the OGC kernel): every
-measurement in `docs/` was taken there.
+measurement in `docs/` was taken there. The units run installed copies, never the tree.
 
 ## Build & run
 
 ```bash
 kmods/build.sh                       # drivers for the running kernel into kmods/<release>/
+scripts/install.sh                   # copies, units, SELinux rule, policy, applet; no start
+sudo systemctl restart thinkwatt-mx  # the service runs the freshly installed copy
 ```
 
 - `kmods/build.sh` needs the kernel headers and the network.
+- `scripts/install.sh` copies `bin/thinkwatt-mxd`, `kmods/swap.sh` and every `kmods/<release>/`
+  to `/usr/local/libexec/thinkwatt-mx/`: a change in the tree reaches the system only after it
+  and a restart. It always restarts `plasmashell`.
 - `busctl` is the service's command line; the interface is `docs/dbus.md`.
 
 ## Conventions
@@ -38,6 +43,9 @@ kmods/build.sh                       # drivers for the running kernel into kmods
 - Only `amd_pmf` talks to the SMU. A `ryzenadj` call concurrent with another SMU client, a
   second `ryzenadj` or the firmware's AML on a power-source change, wedged the mailbox and took
   the GPU down (`docs/smu.md`).
+- Without the SELinux rule `scripts/install.sh` lays on
+  `/usr/local/libexec/thinkwatt-mx/kmods(/.*)?`, the kernel refuses the patched modules and the
+  service stops: nothing reports it.
 - `kmods/swap.sh` leaves a driver that is already the patched one loaded: restarting
   `thinkwatt-mx-kmods` after a change to `kmods/patches/` keeps the old module until a reboot.
 - The QML D-Bus module wraps every value: the applet reads through `plain()` and refreshes with
@@ -52,13 +60,14 @@ kmods/build.sh                       # drivers for the running kernel into kmods
 
 ## Boundaries
 
-- `systemctl` on the units, the benches and any write to the service or
+- `scripts/install.sh`, `systemctl` on the units, the benches and any write to the service or
   to sysfs act on the running machine's kernel, fan and power limits: run them only on the
   owner's go. The read-only `busctl get-property` and `ReadFigures`
   calls need none.
 
 ## Docs
 
+- `docs/install.md` — requirements, updating, removing, the log lines that name a fix.
 - `docs/kernel.md` — before touching `kmods/`: what each patch adds and how `swap.sh` loads it.
 - `docs/envelope.md` and `docs/lapmode.md` — before changing what the service writes, and why.
 - `docs/fan.md` — the curve and its hysteresis, before touching the fan loop.

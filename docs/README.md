@@ -2,6 +2,7 @@
 
 ## Using ThinkWatt MX
 
+- [Installation](install.md): requirements, risks, installing, updating, removing, problems
 - [Usage](usage.md): the Plasma applet and the command line
 
 ## Reference

@@ -56,6 +56,9 @@ Nothing in ThinkWatt MX writes to the SMU except through `amd_pmf`:
 The service never reads the SMU on a timer. It writes the target only while `Ceiling` is set,
 once per kernel event.
 
+Do not run `ryzenadj`, or any tool that opens `ryzen_smu`, while ThinkWatt MX is installed.
+Some images load `ryzen_smu` at boot; ThinkWatt MX never opens it.
+
 ## Recognizing a hang
 
 The load average climbs to about 16 while only one process is runnable. The rest are kernel

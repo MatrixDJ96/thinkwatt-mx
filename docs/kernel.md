@@ -56,8 +56,8 @@ given. It needs the kernel headers and the network:
 
 ## Loading
 
-`/lib/modules` is read-only on Fedora Atomic, so the patched modules live outside it, and an
-SELinux rule must label them
+`/lib/modules` is read-only on Fedora Atomic. `scripts/install.sh` copies the modules to
+`/usr/local/libexec/thinkwatt-mx/kmods/<release>/`, and an SELinux rule labels them
 `modules_object_t`. Without that label the kernel refuses to load them.
 
 At boot `thinkwatt-mx-kmods.service` runs `swap.sh` before TuneD and the service. For each
@@ -65,3 +65,6 @@ driver still in its stock version, `swap.sh` unloads it (with `amdxdna`, which h
 and loads the patched copy with the options `modprobe` would pass, including
 `thinkpad_acpi.fan_control=1`. When `tuned-ppd` is already running, it also restores
 `platform_profile` from it, because both drivers start their profile handler on `balanced`.
+
+What to run after a kernel update or a change to the patches is in
+[`install.md`](install.md#updating).

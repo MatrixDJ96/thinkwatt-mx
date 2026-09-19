@@ -37,6 +37,7 @@ the design, so the same mistake is not made twice.
 | fan hysteresis applies in both directions               | it held the fan still at 85 °C; the fan now rises at once and waits only when falling            |
 | a falling fan goes to the curve's level                 | it chattered between bands; it now falls to the level the curve gives 2 °C higher                |
 | `thinkpad_acpi` keeps `fan_control=1` across a reload   | `insmod` takes only its own arguments; `swap.sh` passes the options `modprobe -c` lists          |
+| units can run code from the clone                       | the user can write the clone; the service and drivers are copied where only root writes          |
 
 ## Applet
 
