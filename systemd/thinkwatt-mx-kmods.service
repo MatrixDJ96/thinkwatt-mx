@@ -1,0 +1,14 @@
+[Unit]
+Description=Load the ThinkWatt MX patched drivers in place of the in-tree ones
+Documentation=https://github.com/MatrixDJ96/thinkwatt-mx/blob/main/docs/kernel.md
+ConditionPathExists=@PREFIX@/kmods/%v/amd-pmf.ko
+After=systemd-modules-load.service
+Before=thinkwatt-mx.service tuned.service tuned-ppd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=@PREFIX@/bin/swap.sh
+
+[Install]
+WantedBy=multi-user.target
