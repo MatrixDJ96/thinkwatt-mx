@@ -11,12 +11,16 @@ measurement in `docs/` was taken there. The units run installed copies, never th
 kmods/build.sh                       # drivers for the running kernel into kmods/<release>/
 scripts/install.sh                   # copies, units, SELinux rule, policy, applet; no start
 sudo systemctl restart thinkwatt-mx  # the service runs the freshly installed copy
+scripts/check.sh                     # every gate: width, lint, format, locale, fan test
+scripts/check.sh --self-test         # the linters and the width guard refuse bad input
 ```
 
 - `kmods/build.sh` needs the kernel headers and the network.
 - `scripts/install.sh` copies `bin/thinkwatt-mxd`, `kmods/swap.sh` and every `kmods/<release>/`
   to `/usr/local/libexec/thinkwatt-mx/`: a change in the tree reaches the system only after it
   and a restart. It always restarts `plasmashell`.
+- `scripts/check.sh` needs `shellcheck`, `shfmt`, `ruff`, `gettext` and a `python3` with
+  PyGObject.
 - `busctl` is the service's command line; the interface is `docs/dbus.md`.
 
 ## Conventions
@@ -48,6 +52,8 @@ sudo systemctl restart thinkwatt-mx  # the service runs the freshly installed co
   service stops: nothing reports it.
 - `kmods/swap.sh` leaves a driver that is already the patched one loaded: restarting
   `thinkwatt-mx-kmods` after a change to `kmods/patches/` keeps the old module until a reboot.
+- Both fan curve gates fail with `No module named 'gi'` when the first `python3` on `PATH`
+  lacks PyGObject: `tests/fan_curve.py` imports the service. Put the system `python3` first.
 - The QML D-Bus module wraps every value: the applet reads through `plain()` and refreshes with
   `updateAll()`.
 - A QML D-Bus map write crashes `plasmashell` when the property is missing from the service's
@@ -62,7 +68,7 @@ sudo systemctl restart thinkwatt-mx  # the service runs the freshly installed co
 
 - `scripts/install.sh`, `systemctl` on the units, the benches and any write to the service or
   to sysfs act on the running machine's kernel, fan and power limits: run them only on the
-  owner's go. The read-only `busctl get-property` and `ReadFigures`
+  owner's go. `scripts/check.sh` and the read-only `busctl get-property` and `ReadFigures`
   calls need none.
 
 ## Docs
