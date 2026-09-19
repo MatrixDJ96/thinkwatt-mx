@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "io.github.matrixdj96.thinkwattmx",
+        "Name": "ThinkWatt MX",
+        "Name[it]": "ThinkWatt MX",
+        "Description": "Clock, temperature, power, fan and lap mode of the ThinkPad L14 Gen 6",
+        "Description[it]": "Clock, temperatura, potenza, ventola e lap mode del ThinkPad L14 Gen 6",
+        "Icon": "cpu",
+        "Category": "System Information",
+        "License": "GPL-3.0-or-later",
+        "Version": "1.0.0",
+        "Authors": [
+            {
+                "Name": "Mattia Rombi"
+            }
+        ]
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

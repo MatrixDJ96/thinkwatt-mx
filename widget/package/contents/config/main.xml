@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name=""/>
+    <group name="General">
+        <entry name="interval" type="Int">
+            <label>Milliseconds between two readings</label>
+            <default>500</default>
+        </entry>
+        <entry name="panelItems" type="StringList">
+            <label>The readings the panel shows, in order</label>
+            <default>freq,tctl,soc_power</default>
+        </entry>
+        <entry name="panelColors" type="StringList">
+            <label>key=#rrggbb for each panel reading with a colour of its own</label>
+            <default></default>
+        </entry>
+        <entry name="panelSeparator" type="String">
+            <label>The character between two panel readings, or "space"</label>
+            <default>·</default>
+        </entry>
+        <entry name="showSoc" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="showCpu" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="showGpu" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="showSelectors" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="skinTarget" type="Int">
+            <label>Skin temperature target that performance+ applies, and applies again when changed</label>
+            <default>47</default>
+        </entry>
+    </group>
+</kcfg>

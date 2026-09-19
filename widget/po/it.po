@@ -1,0 +1,236 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: plasma_applet_io.github.matrixdj96.thinkwattmx\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-23 01:58+0200\n"
+"PO-Revision-Date: 2026-09-19 23:00+0200\n"
+"Last-Translator: Mattia Rombi\n"
+"Language-Team: Italian\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "General"
+msgstr "Generale"
+
+msgid "CPU"
+msgstr ""
+
+msgid "GPU"
+msgstr ""
+
+msgid "System"
+msgstr "Sistema"
+
+msgid "Clock"
+msgstr "Clock"
+
+msgid "Temperature"
+msgstr "Temperatura"
+
+msgid "Load"
+msgstr "Carico"
+
+msgid "SoC power"
+msgstr "Potenza SoC"
+
+msgid "Fan speed"
+msgstr "Velocità ventola"
+
+msgid "Fan level"
+msgstr "Livello ventola"
+
+msgid "Profile"
+msgstr "Profilo"
+
+msgid "CPU clock"
+msgstr "Clock CPU"
+
+msgid "CPU temperature"
+msgstr "Temperatura CPU"
+
+msgid "CPU load"
+msgstr "Carico CPU"
+
+msgid "GPU clock"
+msgstr "Clock GPU"
+
+msgid "GPU temperature"
+msgstr "Temperatura GPU"
+
+msgid "GPU load"
+msgstr "Carico GPU"
+
+msgid "%1 GHz"
+msgstr ""
+
+msgid "%1 °C"
+msgstr ""
+
+msgid "CPU %1 %"
+msgstr ""
+
+msgid "GPU %1 MHz"
+msgstr ""
+
+msgid "GPU %1 °C"
+msgstr ""
+
+msgid "GPU %1 %"
+msgstr ""
+
+msgid "%1 W"
+msgstr ""
+
+msgid "%1 rpm"
+msgstr ""
+
+msgid "(%1)"
+msgstr "(%1)"
+
+msgid "Colour of this reading"
+msgstr "Colore di questa lettura"
+
+msgid "Refresh every:"
+msgstr "Aggiorna ogni:"
+
+msgid "%1 ms"
+msgstr ""
+
+msgid "Panel"
+msgstr "Pannello"
+
+msgid "Drag to reorder, click to pick a colour, right-click to reset it"
+msgstr "Trascina per riordinare, clic per il colore, clic destro per ripristinarlo"
+
+msgid "No reading selected"
+msgstr "Nessuna lettura selezionata"
+
+msgid "Separator:"
+msgstr "Separatore:"
+
+msgid "space"
+msgstr "spazio"
+
+msgid "Popup"
+msgstr "Finestra"
+
+msgid "SoC readings"
+msgstr "Letture SoC"
+
+msgid "GPU readings"
+msgstr "Letture GPU"
+
+msgid "CPU readings"
+msgstr "Letture CPU"
+
+msgid "Selectors"
+msgstr "Selettori"
+
+msgid "Skin target"
+msgstr "Target scocca"
+
+msgid "performance+ %1 °C"
+msgstr "performance+ %1 °C"
+
+msgid ""
+"The skin temperature performance+ lets the chassis reach. Higher means more "
+"sustained power and a warmer chassis."
+msgstr ""
+"La temperatura della scocca che performance+ lascia raggiungere. Più alta "
+"significa più potenza sostenuta e una scocca più calda."
+
+msgid "Measured under full load: 22 W sustained at 37 °C, 33 W at 47 °C."
+msgstr "Misurato a pieno carico: 22 W sostenuti a 37 °C, 33 W a 47 °C."
+
+msgid "(max)"
+msgstr "(max)"
+
+msgid "SoC"
+msgstr ""
+
+msgid "Power"
+msgstr "Potenza"
+
+msgid "Fan"
+msgstr "Ventola"
+
+msgid "Lap mode"
+msgstr ""
+
+msgid "Temp."
+msgstr ""
+
+msgid "Mode"
+msgstr "Modo"
+
+msgid "Governor"
+msgstr ""
+
+msgid "%1 rpm %2"
+msgstr ""
+
+msgid "active, ceiling halved"
+msgstr "attiva, tetto dimezzato"
+
+msgid "inactive"
+msgstr "inattiva"
+
+msgid "%1 %"
+msgstr ""
+
+msgid "%1 MHz"
+msgstr ""
+
+msgid "ThinkWatt MX"
+msgstr ""
+
+msgid "Lap mode active: the ceiling is halved"
+msgstr "Lap mode attiva: il tetto è dimezzato"
+
+msgid "%1 · %2 threads"
+msgstr "%1 · %2 thread"
+
+msgid "service stopped"
+msgstr "servizio fermo"
+
+msgid "GHz"
+msgstr ""
+
+msgid "°C"
+msgstr ""
+
+msgid "CPU temp."
+msgstr "Temp. CPU"
+
+msgid "W"
+msgstr ""
+
+msgid "Service"
+msgstr "Servizio"
+
+msgid "Stop the service: the ceiling closes and the fan goes back to the EC"
+msgstr "Ferma il servizio: il tetto si chiude e la ventola torna all'EC"
+
+msgid "Start the service"
+msgstr "Avvia il servizio"
+
+msgid "performance with the ceiling at %1 °C"
+msgstr "performance con il tetto a %1 °C"
+
+msgid "CPU mode"
+msgstr "Modo CPU"
+
+msgid "GPU governor"
+msgstr "Governor GPU"
+
+msgid "the service's curve"
+msgstr "la curva del servizio"
+
+msgid "the fan to the EC"
+msgstr "la ventola all'EC"
+
+msgid "Needs the service running"
+msgstr "Richiede il servizio attivo"
