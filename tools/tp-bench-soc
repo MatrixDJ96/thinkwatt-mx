@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# Measure how the CPU and the iGPU divide the one SoC power budget of a ThinkPad L14 Gen 6 AMD.
+#
+# Usage: sudo tp-bench-soc [seconds]
+#   seconds  length of each loaded leg, default 60
+#
+# Four legs: idle, CPU only, GPU only, both. The package power is the same in every loaded leg
+# — the point is what happens to the CPU clock when the GPU takes its share.
+# Exit status: 0 measured, 1 a prerequisite is missing or the seconds are not a number.
+#
+# It changes nothing but the GPU's DPM level, pinned high for the GPU legs and set back to auto
+# on exit: a light GL load leaves the driver at the lowest state, where the GPU draws nothing
+# and the contention never shows. Profile, ceiling and a clear desktop belong to whoever runs
+# it, and the state printed on top is what the numbers belong to; a firmware still in thermal
+# fallback shows there as the low STT limit under a performance profile. The limits are read
+# once, from the patched amd_pmf, for that header: every sample comes from sysfs.
+
+set -euo pipefail
+
+readonly PMF=/sys/bus/platform/devices/AMDI0102:00
+readonly SERVICE=io.github.matrixdj96.ThinkwattMX
+readonly OBJECT=/io/github/matrixdj96/ThinkwattMX
+
+readonly SECS=${1:-60}
+readonly PROFILE=/sys/firmware/acpi/platform_profile
+readonly FAN=/proc/acpi/ibm/fan
+readonly GEOMETRY=1280x720
+# glxgears runs on the desktop of whoever called sudo.
+readonly USER_UID=${SUDO_UID:-1000}
+
+CARD=$(dirname "$(echo /sys/class/drm/card*/device/pp_dpm_sclk)")
+readonly CARD
+gears_pid=""
+# A bare `wait` would also wait on glxgears, which never exits: the run deadlocks at the end.
+cpu_pid=""
+
+cleanup() {
+    if [ -n "$gears_pid" ]; then
+        kill "$gears_pid" 2> /dev/null || true
+    fi
+    printf 'auto\n' > "$CARD/power_dpm_force_performance_level"
+}
+
+require() {
+    if ! command -v "$1" > /dev/null; then
+        printf 'FAIL: %s is not installed\n' "$1" >&2
+        exit 1
+    fi
+}
+
+hwmon_path() {
+    local wanted=$1 dir
+    for dir in /sys/class/hwmon/hwmon*; do
+        if [ "$(cat "$dir/name" 2> /dev/null)" = "$wanted" ]; then
+            printf '%s' "$dir"
+            return 0
+        fi
+    done
+    printf 'FAIL: no %s hwmon\n' "$wanted" >&2
+    exit 1
+}
+
+limits() {
+    cat "$PMF/power_limits"
+}
+
+connected_screens() {
+    local status
+    for status in /sys/class/drm/card*-*/status; do
+        if [ "$(cat "$status")" = connected ]; then
+            printf '%s ' "$(basename "$(dirname "$status")")"
+        fi
+    done
+}
+
+snap() {
+    printf '%-14s cpu=%-6s MHz  pkg=%-6s W  sclk=%-5s MHz  gpu=%-4s%%  Tctl=%-6s fan=%s\n' \
+        "$1" \
+        "$(awk '/cpu MHz/ { s += $4; n++ } END { printf "%.0f", s / n }' /proc/cpuinfo)" \
+        "$(awk '{ printf "%.2f", $1 / 1000000 }' "$AMDGPU/power1_average")" \
+        "$(awk '{ printf "%.0f", $1 / 1000000 }' "$AMDGPU/freq1_input")" \
+        "$(cat "$CARD/gpu_busy_percent")" \
+        "$(awk '{ printf "%.1f", $1 / 1000 }' "$K10TEMP/temp1_input")" \
+        "$(awk '/^speed:/ { print $2 }' "$FAN")"
+}
+
+cpu_load() {
+    stress-ng --cpu "$(nproc)" --cpu-method matrixprod \
+        --timeout "$((SECS + 10))s" > /dev/null 2>&1 &
+    cpu_pid=$!
+}
+
+# Checked before the first leg: a mistyped first argument otherwise reaches `sleep` only after
+# the load has already saturated every core, and the lag is spent for nothing.
+if ! [[ $SECS =~ ^[0-9]+$ ]]; then
+    printf 'FAIL: seconds must be a number, not %s\n' "$SECS" >&2
+    exit 1
+fi
+
+if [ "$(id -u)" != 0 ]; then
+    printf 'FAIL: the DPM level is root-only: run under sudo\n' >&2
+    exit 1
+fi
+trap cleanup EXIT
+
+if [ ! -r "$PMF/power_limits" ]; then
+    printf 'FAIL: %s/power_limits is missing: the patched amd_pmf is not loaded\n' \
+        "$PMF" >&2
+    exit 1
+fi
+
+require stress-ng
+require glxgears
+K10TEMP=$(hwmon_path k10temp)
+readonly K10TEMP
+AMDGPU=$(hwmon_path amdgpu)
+readonly AMDGPU
+
+# The raised ceiling lives in the service; with the service stopped it reads off.
+ceiling=$(busctl get-property "$SERVICE" "$OBJECT" "$SERVICE" Ceiling 2> /dev/null \
+    | awk '{ print $2 }' || true)
+printf 'profile=%s ceiling=%s screens=%s\n' "$(cat "$PROFILE")" "${ceiling:-off}" \
+    "$(connected_screens)"
+printf 'limits     %s\n' "$(limits)"
+
+sleep 20
+snap '1 idle'
+
+cpu_load
+sleep "$SECS"
+snap '2 CPU only'
+wait "$cpu_pid"
+sleep 20
+
+printf 'high\n' > "$CARD/power_dpm_force_performance_level"
+sudo -u "#$USER_UID" env XDG_RUNTIME_DIR="/run/user/$USER_UID" WAYLAND_DISPLAY=wayland-0 \
+    DISPLAY=:0 vblank_mode=0 glxgears -geometry "$GEOMETRY" > /dev/null 2>&1 &
+gears_pid=$!
+sleep "$SECS"
+snap '3 GPU only'
+
+cpu_load
+sleep "$SECS"
+snap '4 CPU+GPU'
+wait "$cpu_pid"

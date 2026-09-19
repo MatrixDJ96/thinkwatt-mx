@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Measure the burst and sustained power envelope of the machine in the state it is given.
+#
+# Usage: sudo tp-bench-power [seconds] [interval]
+#   seconds   length of the sustained leg, default 150
+#   interval  seconds between samples along that leg, default 30
+#
+# Prints the state it found, then the burst sample and one line per interval with clock, power,
+# Tctl, skin and fan.
+# Exit status: 0 measured, 1 a prerequisite is missing or an argument is not a number.
+#
+# It changes nothing: no profile, no ceiling, no fan. Preparing the machine - the profile, the
+# ceiling, a clear desktop - belongs to whoever runs it, and the state printed on top is what
+# the numbers belong to. That header is also where a machine in thermal fallback shows itself,
+# reading the stock STT limit while the profile still says performance.
+
+set -euo pipefail
+
+# Limits and metrics come from the patched amd_pmf (docs/kernel.md), on the driver's own mailbox.
+readonly PMF=/sys/bus/platform/devices/AMDI0102:00
+readonly SERVICE=io.github.matrixdj96.ThinkwattMX
+readonly OBJECT=/io/github/matrixdj96/ThinkwattMX
+
+readonly THINKLMI=/sys/class/firmware-attributes/thinklmi/attributes
+
+readonly SUSTAINED=${1:-150}
+readonly INTERVAL=${2:-30}
+readonly PROFILE=/sys/firmware/acpi/platform_profile
+readonly FAN=/proc/acpi/ibm/fan
+
+require() {
+    if ! command -v "$1" > /dev/null; then
+        printf 'FAIL: %s is not installed\n' "$1" >&2
+        exit 1
+    fi
+}
+
+limits() {
+    cat "$PMF/power_limits"
+}
+
+# Package power in W, the hottest core and the skin in degrees C.
+values() {
+    awk -v RS=' ' -F= '
+        $1 == "apu_power" { w = $2 / 1000 }
+        $1 == "core_temp" { t = $2 }
+        $1 == "skin_temp" { s = $2 }
+        END { printf "%.3f %s %s", w, t, s }' "$PMF/metrics"
+}
+
+freq() {
+    awk '/cpu MHz/ { s += $4; n++ } END { printf "%.0f", s / n }' /proc/cpuinfo
+}
+
+rpm() {
+    awk '/^speed:/ { print $2 }' "$FAN"
+}
+
+load() {
+    stress-ng --cpu "$(nproc)" --cpu-method matrixprod --timeout "$1" > /dev/null 2>&1 &
+}
+
+# The sample carries the elapsed time it was actually taken at, reading the table costing what
+# it costs: a label that drifted from the reading would be worse than an uneven spacing. The count
+# is fixed for the same reason: a deadline read off whole seconds drops the last sample of the
+# leg, the far end of every decay the leg is run to see, on one second of misalignment.
+leg() {
+    local secs=$1 interval=$2 started sample
+    load 4s
+    sleep 2
+    printf '  burst 2 s  clock=%-6s W/Tctl/STT= %s\n' "$(freq)" "$(values)"
+    wait
+    # The SMU averages STAPM over 19.2 s: the sustained leg starts once the burst has left that
+    # window, or its first sample would carry the burst's energy. No event says the average is
+    # clean, and polling the table until it is would only rediscover the window's length.
+    sleep 25
+    load "$((secs + 5))s"
+    started=$SECONDS
+    for ((sample = 1; sample <= secs / interval; sample++)); do
+        sleep "$interval"
+        printf '  t+%-5s    clock=%-6s W/Tctl/STT= %s  fan=%s\n' \
+            "$((SECONDS - started))" "$(freq)" "$(values)" "$(rpm)"
+    done
+    wait
+}
+
+# Checked before anything runs: a mistyped argument otherwise reaches the load only after the
+# burst has already saturated every core, and the lag is spent for nothing.
+if ! [[ $SUSTAINED =~ ^[0-9]+$ ]] || ! [[ $INTERVAL =~ ^[1-9][0-9]*$ ]]; then
+    printf 'FAIL: seconds and interval must be numbers, not %s and %s\n' \
+        "$SUSTAINED" "$INTERVAL" >&2
+    exit 1
+fi
+
+if [ "$INTERVAL" -gt "$SUSTAINED" ]; then
+    printf 'FAIL: interval %s is longer than the leg %s: no sample would be taken\n' \
+        "$INTERVAL" "$SUSTAINED" >&2
+    exit 1
+fi
+
+if [ "$(id -u)" != 0 ]; then
+    printf 'FAIL: root required: run under sudo\n' >&2
+    exit 1
+fi
+
+if [ ! -r "$PMF/metrics" ]; then
+    printf 'FAIL: %s/metrics is missing: the patched amd_pmf is not loaded\n' "$PMF" >&2
+    exit 1
+fi
+
+require stress-ng
+
+# The raised ceiling lives in the service; with the service stopped it reads off.
+ceiling=$(busctl get-property "$SERVICE" "$OBJECT" "$SERVICE" Ceiling 2> /dev/null \
+    | awk '{ print $2 }' || true)
+printf 'profile=%s ceiling=%s IntelligentCoolingBoost=%s fan_control=%s\n' \
+    "$(cat "$PROFILE")" "${ceiling:-off}" \
+    "$(cat "$THINKLMI/IntelligentCoolingBoost/current_value" 2> /dev/null || echo unknown)" \
+    "$(cat /sys/module/thinkpad_acpi/parameters/fan_control)"
+printf 'limits     %s\n' "$(limits)"
+leg "$SUSTAINED" "$INTERVAL"
