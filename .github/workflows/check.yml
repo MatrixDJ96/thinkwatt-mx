@@ -1,0 +1,32 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    # The gates' tools as the supported platform ships them: Fedora's shfmt, ruff and xgettext
+    # are the versions the tree is checked and its catalogues are built with.
+    container: fedora:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Gates
+            step: Run the gates
+            args: ""
+          - name: Self-test
+            step: Prove the gates refuse bad input
+            args: --self-test
+    steps:
+      - name: Install tools
+        run: >-
+          dnf install -y --setopt=install_weak_deps=False
+          ShellCheck shfmt ruff python3 python3-gobject gettext
+      - name: Check out
+        uses: actions/checkout@v5
+      - name: ${{ matrix.step }}
+        run: scripts/check.sh ${{ matrix.args }}
