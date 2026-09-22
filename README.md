@@ -1,5 +1,6 @@
 # ThinkWatt MX
 
+[![check](https://github.com/MatrixDJ96/thinkwatt-mx/actions/workflows/check.yml/badge.svg)](https://github.com/MatrixDJ96/thinkwatt-mx/actions/workflows/check.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 
 Power management for the ThinkPad L14 Gen 6 AMD on Linux. ThinkWatt MX raises the sustained

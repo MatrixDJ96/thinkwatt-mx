@@ -28,7 +28,8 @@ On other systems the build or the installer stops at a known point:
 - A raised limit means more power and a warmer chassis, about 2 °C at the skin.
 - Tools that write to the SMU, such as `ryzenadj`, can hang the GPU when they run next to the
   kernel's own writes. Do not use them with ThinkWatt MX ([`smu.md`](smu.md)).
-- The service runs as root.
+- The service runs as root. Report security problems as described in
+  [`SECURITY.md`](../SECURITY.md).
 - ThinkWatt MX comes with no warranty.
 
 ## Installing

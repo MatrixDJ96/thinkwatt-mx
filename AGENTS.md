@@ -20,7 +20,7 @@ scripts/check.sh --self-test         # the linters and the width guard refuse ba
   to `/usr/local/libexec/thinkwatt-mx/`: a change in the tree reaches the system only after it
   and a restart. It always restarts `plasmashell`.
 - `scripts/check.sh` needs `shellcheck`, `shfmt`, `ruff`, `gettext` and a `python3` with
-  PyGObject.
+  PyGObject; CI runs both check commands in a Fedora container on every push and pull request.
 - `busctl` is the service's command line; the interface is `docs/dbus.md`.
 
 ## Conventions

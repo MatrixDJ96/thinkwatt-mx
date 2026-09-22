@@ -1,0 +1,36 @@
+name: Bug report
+description: Something the service, the drivers, the applet or a script does wrong
+body:
+  - type: input
+    id: machine
+    attributes:
+      label: Machine
+      description: Model and machine type, from `cat /sys/class/dmi/id/product_version /sys/class/dmi/id/product_name`
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: BIOS and EC
+      description: From `cat /sys/class/dmi/id/bios_version` and `cat /sys/class/dmi/id/ec_firmware_release`
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Image or distribution, and `uname -r`
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: journal
+    attributes:
+      label: Journal
+      description: "`journalctl -b -u thinkwatt-mx -u thinkwatt-mx-kmods --no-pager`"
+      render: text

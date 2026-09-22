@@ -23,4 +23,4 @@
 - [Measurements](measurements.md): the benches, the method and the reference runs
 
 Open work is in [`ROADMAP.md`](../ROADMAP.md), past mistakes in
-[`CHANGELOG.md`](../CHANGELOG.md).
+[`CHANGELOG.md`](../CHANGELOG.md), development in [`CONTRIBUTING.md`](../CONTRIBUTING.md).
