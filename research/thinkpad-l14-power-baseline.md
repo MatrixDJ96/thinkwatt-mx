@@ -4,6 +4,10 @@ Measured 2026-09-17 on `bazzite-mx:stable` 44.20260907.2, kernel 7.2.3-ogc3.1, o
 21S9S2V600, BIOS R2UET33W 1.33, EC R2UHT25W, Ryzen 7 PRO 250 / Radeon 780M, 8C/16T, single-core
 ceiling 5134 MHz. Load: `stress-ng --cpu 16 --cpu-method matrixprod`.
 
+Contents: the stock leg on the second architecture · what binds · traps that invalidate a
+measurement · with IntelligentCoolingBoost enabled · the thermal fallback · dytc_lapmode pins
+the machine to 14 W · staged for the next boot.
+
 **Baseline state**: `IntelligentCoolingBoost=Disable`, stock SMU limits, EC fan curve,
 `amd_pmf` loaded. Reproduce with `tools/tp-bench-power`.
 

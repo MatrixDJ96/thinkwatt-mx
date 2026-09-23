@@ -62,7 +62,7 @@ No table allows more than 22 W of STAPM, so no BIOS option gives more.
 
 The firmware sends a table again on several events: a profile change, a power-source change, a
 battery change and a lap mode change. The EC query `_Q3E` also calls `DSTT` at times that are
-not yet known ([`../ROADMAP.md`](../ROADMAP.md)).
+not known ([`../ROADMAP.md`](../ROADMAP.md)).
 
 The service writes the target again after each event it can see ([`dbus.md`](dbus.md#events)).
 A table sent by `_Q3E` stays in force until the next such event.

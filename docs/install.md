@@ -56,6 +56,9 @@ sudo systemctl restart thinkwatt-mx-kmods thinkwatt-mx
 Build before rebooting into a new kernel. Without drivers for it, both units are skipped and
 the stock drivers stay loaded.
 
+A driver that is already the patched one stays loaded when the units restart, so a change to
+`kmods/patches/` takes effect at the next boot.
+
 ## Removing
 
 ```bash

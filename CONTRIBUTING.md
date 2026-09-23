@@ -10,8 +10,9 @@ release and the service log, which most problems need.
 
 ## Setting up
 
-The gates need `shellcheck`, `shfmt`, `ruff` and `gettext` on `PATH`. Run every gate, then
-prove that the linters reject bad input:
+The gates need `shellcheck`, `shfmt`, `ruff` and `gettext` on `PATH`, and PyGObject in the
+`python3` found there (`python3-gobject` on Fedora). Run every gate, then prove that the
+linters reject bad input:
 
 ```bash
 scripts/check.sh

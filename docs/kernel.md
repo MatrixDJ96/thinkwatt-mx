@@ -66,5 +66,5 @@ and loads the patched copy with the options `modprobe` would pass, including
 `thinkpad_acpi.fan_control=1`. When `tuned-ppd` is already running, it also restores
 `platform_profile` from it, because both drivers start their profile handler on `balanced`.
 
-After a kernel update, run `kmods/build.sh` and `scripts/install.sh` before rebooting. Without
-modules for the new kernel, both units are skipped and the stock drivers stay loaded.
+What to run after a kernel update or a change to the patches is in
+[`install.md`](install.md#updating).
