@@ -35,6 +35,13 @@ SPDX-License-Identifier: GPL-2.0-only
  	NULL,
  };
  
+@@ -668,5 +673,6 @@ static struct platform_driver amd_pmf_driver = {
+ module_platform_driver(amd_pmf_driver);
+ 
+ MODULE_LICENSE("GPL");
+ MODULE_DESCRIPTION("AMD Platform Management Framework Driver");
+ MODULE_SOFTDEP("pre: amdtee");
++MODULE_VERSION("thinkwatt-mx");
 --- a/drivers/platform/x86/amd/pmf/pmf.h
 +++ b/drivers/platform/x86/amd/pmf/pmf.h
 @@ -15,6 +15,7 @@

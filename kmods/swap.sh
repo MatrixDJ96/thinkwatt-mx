@@ -10,13 +10,13 @@
 #
 # /lib/modules is read-only on Fedora Atomic, so the copies live outside it and
 # thinkwatt-mx-kmods.service loads them at boot, before the daemons and before TuneD. A module
-# already loaded from our copy is left alone; the in-tree one is unloaded first, amdxdna with it
-# because it holds amd_pmf. insmod takes a module's arguments from its own command line alone,
-# so the options modprobe would collect, from the kernel command line and from modprobe.d, are
-# passed by hand: that is how thinkpad_acpi keeps fan_control=1. Both drivers register a
-# platform_profile handler at init and start it on balanced, so when the profile daemon is
-# already up the aggregate is rewritten from its ActiveProfile; at boot the daemon starts after
-# this unit and applies its own.
+# already loaded from this copy, by srcversion, is left alone; any other is unloaded first,
+# amdxdna with it because it holds amd_pmf. insmod takes a module's arguments from its own
+# command line alone, so the options modprobe would collect, from the kernel command line and
+# from modprobe.d, are passed by hand: that is how thinkpad_acpi keeps fan_control=1. Both
+# drivers register a platform_profile handler at init and start it on balanced, so when the
+# profile daemon is already up the aggregate is rewritten from its ActiveProfile; at boot the
+# daemon starts after this unit and applies its own.
 
 set -euo pipefail
 
@@ -35,30 +35,27 @@ fail() {
     exit 1
 }
 
-# Whether the loaded module is our current copy: each patch adds one thing to sysfs the in-tree
-# module has not, for amd_pmf the latest thing, which an older copy of ours has not either.
-# amd_pmf carries no srcversion to compare, thinkpad_acpi's would do but one rule is simpler
-# than two.
-is_ours() {
-    case "$1" in
-        amd_pmf) [ -e /sys/bus/platform/devices/AMDI0102:00/stt_tables ] ;;
-        thinkpad_acpi)
-            [ "$(stat -c %a /sys/devices/platform/thinkpad_acpi/dytc_lapmode 2> /dev/null)" = 644 ]
-            ;;
-    esac
+# Whether the loaded module is this installed copy: srcversion is a hash of the sources a module
+# was built from, the same for every build of them, so a changed patch or source changes it. The
+# in-tree thinkpad_acpi has another one, the in-tree amd_pmf none, and a module not loaded none.
+is_current() {
+    local module=$1 file=$2 loaded
+    loaded=$(cat "/sys/module/$module/srcversion" 2> /dev/null) || return 1
+    [ "$loaded" = "$(modinfo -F srcversion "$file")" ]
 }
 
 # Loads <file> under <module name>, replacing whatever is loaded unless it is already this copy.
 # A copy that refuses to load gives its place back to the in-tree module, and the call fails.
 swap() {
     local module=$1 file=$2 args=${3:-}
-    if is_ours "$module"; then
-        printf 'OK:   %s already ours\n' "$module"
+    if is_current "$module" "$file"; then
+        printf 'OK:   %s already current\n' "$module"
         return 0
     fi
     if [ -d "/sys/module/$module" ]; then
         if ! rmmod "$module"; then
-            fail "$module refused to unload"
+            printf 'FAIL: %s refused to unload\n' "$module" >&2
+            return 1
         fi
     fi
     # shellcheck disable=SC2086  # args is a list of name=value words
@@ -99,7 +96,7 @@ for file in "$DIR/amd-pmf.ko" "$DIR/thinkpad_acpi.ko"; do
 done
 
 removed_xdna=
-if [ -d /sys/module/amdxdna ] && ! is_ours amd_pmf; then
+if [ -d /sys/module/amdxdna ] && ! is_current amd_pmf "$DIR/amd-pmf.ko"; then
     if ! rmmod amdxdna; then
         fail "amdxdna refused to unload"
     fi

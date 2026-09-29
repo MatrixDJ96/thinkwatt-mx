@@ -70,12 +70,16 @@ given. It needs the kernel headers and the network:
 `modules_object_t`. Without that label the kernel refuses to load them.
 
 At boot `thinkwatt-mx-kmods.service` runs `swap.sh` before TuneD and the service. For each
-driver that lacks what its patch adds to sysfs (for `amd_pmf`, `stt_tables`, the latest
-attribute), `swap.sh` unloads it (with `amdxdna`, which holds `amd_pmf`) and loads the patched
-copy with the options `modprobe` would pass, including `thinkpad_acpi.fan_control=1`. When
-`tuned-ppd` is already running, it also restores `platform_profile` from it, because both
-drivers start their profile handler on `balanced`. A patched copy that refuses to load gives
-its place back to the in-tree module, and the unit fails.
+driver whose loaded `srcversion` differs from the installed copy's, `swap.sh` unloads it (with
+`amdxdna`, which holds `amd_pmf`) and loads the patched copy with the options `modprobe` would
+pass, including `thinkpad_acpi.fan_control=1`. When `tuned-ppd` is already running, it also
+restores `platform_profile` from it, because both drivers start their profile handler on
+`balanced`. A patched copy that refuses to load gives its place back to the in-tree module, and
+the unit fails.
+
+`srcversion` is a hash of the sources a module was built from: every build of the same sources
+gives the same one, and a changed patch gives another. The `amd_pmf` patch adds
+`MODULE_VERSION`, without which the driver has none.
 
 What to run after a kernel update or a change to the patches is in
 [`install.md`](install.md#updating).

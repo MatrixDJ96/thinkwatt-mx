@@ -53,8 +53,6 @@ scripts/check.sh --self-test         # the linters, width guard and locale gate 
   `/usr/local/libexec/thinkwatt-mx/kmods(/.*)?`, the kernel refuses the patched modules:
   `thinkwatt-mx-kmods` fails with `FAIL: <file> refused to load`, `thinkwatt-mx` does not
   start, and no log line names the missing label.
-- `kmods/swap.sh` leaves a driver that is already the patched one loaded: restarting
-  `thinkwatt-mx-kmods` after a change to `kmods/patches/` keeps the old module until a reboot.
 - Both fan curve gates fail with `No module named 'gi'` when the first `python3` on `PATH`
   lacks PyGObject: `tests/fan_curve.py` imports the service. Put the system `python3` first.
 - The QML D-Bus module wraps every value: the applet reads through `plain()` and refreshes with
