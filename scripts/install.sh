@@ -196,7 +196,7 @@ remove_applet() {
 
 install_applet() {
     local containment=$1 tray=$2 placed=yes number order
-    "$HERE/widget/build-locale.sh"
+    "$HERE/widget/build-locale.sh" --compile
     if applet_installed; then
         kpackagetool6 --type Plasma/Applet --upgrade "$HERE/widget/package"
     else

@@ -3,9 +3,10 @@
 # language lives in widget/po/<lang>.po, and Plasma loads the compiled catalogue from
 # contents/locale/<lang>/LC_MESSAGES/plasma_applet_<id>.mo inside the package.
 #
-# Usage: widget/build-locale.sh [--check]
+# Usage: widget/build-locale.sh [--check | --compile]
 #   (no argument)  refresh the template from the QML, merge every catalogue, compile the .mo files
 #   --check        compile every catalogue to nowhere and require it to be well-formed
+#   --compile      compile the .mo files from the catalogues as they are, rewriting no tracked file
 #
 # Exit status: 0 every catalogue compiled, 1 one of them did not or a tool is missing.
 
@@ -37,13 +38,17 @@ if [ "${1:-}" = --check ]; then
 fi
 
 # The KDE keyword set for i18n in QML, as develop.kde.org documents it.
-find "$PACKAGE/contents" -name '*.qml' | sort | xgettext --files-from=- --from-code=UTF-8 \
-    --language=JavaScript -C -kde -ci18n -ki18n:1 -ki18nc:1c,2 -ki18np:1,2 -ki18ncp:1c,2,3 \
-    --package-name="$DOMAIN" --no-location -o "$TEMPLATE"
+if [ "${1:-}" != --compile ]; then
+    find "$PACKAGE/contents" -name '*.qml' | sort | xgettext --files-from=- --from-code=UTF-8 \
+        --language=JavaScript -C -kde -ci18n -ki18n:1 -ki18nc:1c,2 -ki18np:1,2 -ki18ncp:1c,2,3 \
+        --package-name="$DOMAIN" --no-location -o "$TEMPLATE"
+fi
 
 for catalogue in "$PO"/*.po; do
     lang=$(basename "$catalogue" .po)
-    msgmerge --quiet --update --backup=none "$catalogue" "$TEMPLATE"
+    if [ "${1:-}" != --compile ]; then
+        msgmerge --quiet --update --backup=none "$catalogue" "$TEMPLATE"
+    fi
     mkdir -p "$PACKAGE/contents/locale/$lang/LC_MESSAGES"
     target=$PACKAGE/contents/locale/$lang/LC_MESSAGES/$DOMAIN.mo
     if ! msgfmt --check -o "$target" "$catalogue"; then
