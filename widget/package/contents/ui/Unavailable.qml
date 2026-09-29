@@ -3,6 +3,7 @@
 import QtQuick
 
 import org.kde.plasma.components as PlasmaComponents
+import org.kde.kirigami as Kirigami
 
 PlasmaComponents.ItemDelegate {
     id: entry
@@ -18,4 +19,5 @@ PlasmaComponents.ItemDelegate {
 
     PlasmaComponents.ToolTip.text: available ? hint : i18n("Needs the service running")
     PlasmaComponents.ToolTip.visible: (hovered || highlighted) && PlasmaComponents.ToolTip.text !== ""
+    PlasmaComponents.ToolTip.delay: Kirigami.Units.toolTipDelay
 }

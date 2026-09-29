@@ -8,10 +8,10 @@ Exit status: 0 stopped by SIGTERM, 1 a prerequisite is missing or the bus name w
 
 One process, one GLib main loop, no thread. The name is io.github.matrixdj96.ThinkwattMX, the
 object /io/github/matrixdj96/ThinkwattMX, the interface the same as the name: four writable
-properties (Ceiling, FanLevel, CpuMode, GpuMode), two read-only ones (Profile, LapMode), three
-methods that read sysfs on demand (ReadFigures, ReadLimits, ReadMetrics). Every property write
-is authorised by polkit, action io.github.matrixdj96.ThinkwattMX.set, checked against the
-caller's bus name; reads ask nothing.
+properties (Ceiling, FanLevel, CpuMode, GpuMode), three read-only ones (Profile, LapMode,
+Version), three methods that read sysfs on demand (ReadFigures, ReadLimits, ReadMetrics). Every
+property write is authorised by polkit, action io.github.matrixdj96.ThinkwattMX.set, checked
+against the caller's bus name; reads ask nothing.
 
 The target and lap mode are attributes of the patched drivers of docs/kernel.md, the GPU level
 amdgpu's own: nothing here reaches the SMU but through the kernel's drivers. The target goes to
@@ -57,6 +57,8 @@ BUS_NAME = "io.github.matrixdj96.ThinkwattMX"
 OBJECT_PATH = "/io/github/matrixdj96/ThinkwattMX"
 INTERFACE = BUS_NAME
 ACTION = f"{BUS_NAME}.set"
+# scripts/install.sh writes the package version into the installed copy.
+VERSION = "@VERSION@"
 ERROR_INVALID_VALUE = f"{BUS_NAME}.Error.InvalidValue"
 ERROR_PROFILE = f"{BUS_NAME}.Error.Profile"
 ERROR_FAILED = f"{BUS_NAME}.Error.Failed"
@@ -75,6 +77,7 @@ INTROSPECTION = f"""
     <property name="GpuMode" type="s" access="readwrite"/>
     <property name="Profile" type="s" access="read"/>
     <property name="LapMode" type="b" access="read"/>
+    <property name="Version" type="s" access="read"/>
     <method name="ReadFigures"><arg type="a{{sv}}" name="figures" direction="out"/></method>
     <method name="ReadLimits"><arg type="a{{sv}}" name="limits" direction="out"/></method>
     <method name="ReadMetrics"><arg type="a{{sv}}" name="metrics" direction="out"/></method>
@@ -423,6 +426,7 @@ class Service:
             "GpuMode": GLib.Variant("s", self.gpu_mode()),
             "Profile": GLib.Variant("s", self.profile),
             "LapMode": GLib.Variant("b", self.lapmode),
+            "Version": GLib.Variant("s", VERSION),
         }
 
     def set_ceiling(self, value):

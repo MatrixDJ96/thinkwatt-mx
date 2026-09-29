@@ -23,6 +23,7 @@ fan to the EC.
 | `GpuMode`  | `s`  | rw     | `auto`, `low`, `high`, or a fixed clock level `0` to `2`   |
 | `Profile`  | `s`  | ro     | the current `platform_profile`                             |
 | `LapMode`  | `b`  | ro     | the content of `dytc_lapmode`, as the service last read it |
+| `Version`  | `s`  | ro     | the package version of the running service                 |
 
 A read of `CpuMode` or `GpuMode` can also give a value another writer set: `<governor>/<epp>`,
 or amdgpu's own level name.
@@ -78,7 +79,8 @@ Every property write is checked against the polkit action
 
 The bus policy in `policy/` lets only root own the name and anyone send to it. The rule also
 lets an active `wheel` user start, stop and restart `thinkwatt-mx.service`, which is how the
-applet's service button works.
+applet's service button works, and restart `thinkwatt-mx-kmods.service`, which restarts the
+service with it.
 
 ## Events
 

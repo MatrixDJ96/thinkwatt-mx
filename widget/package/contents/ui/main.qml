@@ -30,6 +30,7 @@ PlasmoidItem {
     readonly property string objectPath: "/io/github/matrixdj96/ThinkwattMX"
     readonly property string unit: "thinkwatt-mx.service"
     readonly property string updateUnit: "thinkwatt-mx-update.service"
+    readonly property string kmods: "thinkwatt-mx-kmods.service"
     // A condition checked and failed is a missing driver; a unit not yet run since boot has
     // checked nothing.
     readonly property bool offered: latest !== "" && newer(latest, Plasmoid.metaData.version)
@@ -37,6 +38,8 @@ PlasmoidItem {
         && Number(plain(kmodsUnit.properties.ConditionTimestamp)) > 0
     readonly property bool updating: plain(updateState.properties.ActiveState) === "activating"
     readonly property bool updateFailed: plain(updateState.properties.ActiveState) === "failed"
+    // A service older than 1.1.0 has no Version and reads as the missing mark.
+    readonly property bool stale: answered && knob("Version") !== Plasmoid.metaData.version
     readonly property string missing: "—"
     readonly property bool clamped: answered && plain(knobs.properties.LapMode) === true
     // The profile comes from the service while it runs and from the profile daemon otherwise,
@@ -60,6 +63,8 @@ PlasmoidItem {
     // service refuses a ceiling under any other profile, and the daemon takes its time.
     property bool wantCeiling: false
     property string latest: ""
+    // The ceiling and fan level to write back once the restarted service is on the bus.
+    property var restore: null
 
     onProfileChanged: pursueCeiling()
     onAnsweredChanged: pursueCeiling()
@@ -188,6 +193,13 @@ PlasmoidItem {
         unitCommand("StartUnit", updateUnit, function () {
             updateState.updateAll();
         });
+    }
+
+    // The drivers' unit takes the service with it; the restart zeroes the ceiling and puts the
+    // fan back on the curve, so both are written back as the updater does.
+    function restart() {
+        restore = {"ceiling": Number(plain(knobs.properties.Ceiling)), "fan": knob("FanLevel")};
+        unitCommand("RestartUnit", kmods);
     }
 
     function setProfile(name) {
@@ -349,6 +361,15 @@ PlasmoidItem {
         onRegisteredChanged: {
             if (registered) {
                 knobs.updateAll();
+                if (root.restore) {
+                    if (root.restore.ceiling > 0) {
+                        knobs.properties.Ceiling = root.restore.ceiling;
+                    }
+                    if (root.restore.fan !== "curve") {
+                        knobs.properties.FanLevel = root.restore.fan;
+                    }
+                    root.restore = null;
+                }
             } else {
                 root.answered = false;
                 root.figures = {};
@@ -507,15 +528,16 @@ PlasmoidItem {
 
     Plasmoid.status: clamped ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
     toolTipMainText: i18n("ThinkWatt MX")
-    toolTipSubText: clamped ? i18n("Lap mode active: the ceiling is halved") : ""
+    toolTipSubText: clamped ? i18n("Lap mode active: the ceiling is halved")
+        : offered ? i18n("New version available") : stale ? i18n("Service out of date") : ""
 
     compactRepresentation: MouseArea {
         // In a panel the applet is sized from these; the system tray ignores them and hands out a
         // square icon cell instead, which is why this applet lives in the panel. The width is
         // that of the widest reading, so a digit more or less never shoves the neighbours; the
         // warning icon's slot exists only while it shows, a centred row spreads an empty one.
-        Layout.minimumWidth: widest.width + Kirigami.Units.smallSpacing * 2 + (root.clamped
-            ? Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing : 0)
+        Layout.minimumWidth: widest.width + Kirigami.Units.smallSpacing * 2 + (badge.visible
+            ? badge.implicitWidth + Kirigami.Units.smallSpacing : 0)
         Layout.preferredWidth: Layout.minimumWidth
 
         TextMetrics {
@@ -531,11 +553,15 @@ PlasmoidItem {
             anchors.centerIn: parent
             spacing: Kirigami.Units.smallSpacing
 
+            // Breeze has update-low only from 22 px, whose margin matches the 16 px warning.
             Kirigami.Icon {
-                visible: root.clamped
-                source: "dialog-warning"
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
+                id: badge
+
+                visible: root.clamped || root.stale || root.offered
+                source: root.clamped ? "dialog-warning" : "update-low"
+                implicitWidth: root.clamped ? Kirigami.Units.iconSizes.small
+                    : Kirigami.Units.iconSizes.smallMedium
+                implicitHeight: implicitWidth
             }
 
             PlasmaComponents.Label {
@@ -568,9 +594,19 @@ PlasmoidItem {
                 ColumnLayout {
                     spacing: 0
 
-                    PlasmaExtras.Heading {
-                        level: 4
-                        text: i18n("ThinkWatt MX")
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        PlasmaExtras.Heading {
+                            level: 4
+                            text: i18n("ThinkWatt MX")
+                        }
+
+                        PlasmaComponents.Label {
+                            Layout.alignment: Qt.AlignBaseline
+                            text: "v" + Plasmoid.metaData.version
+                            opacity: root.dimmed
+                        }
                     }
 
                     PlasmaComponents.Label {
@@ -598,26 +634,37 @@ PlasmoidItem {
                 anchors.margins: Kirigami.Units.gridUnit
                 spacing: Kirigami.Units.largeSpacing
 
-                // A new release is offered before missing drivers: its install builds them too.
+                // A new release is offered before a stale service or missing drivers: its install
+                // restarts the one and builds the other.
                 Kirigami.InlineMessage {
+                    id: notice
+
+                    readonly property bool restarts: root.stale && !root.updateFailed
+                        && !root.offered
+
                     Layout.fillWidth: true
-                    visible: root.updating || root.updateFailed || root.offered
+                    visible: root.updating || root.updateFailed || root.offered || root.stale
                         || root.driversMissing
                     type: root.updateFailed ? Kirigami.MessageType.Error
                         : root.driversMissing && !root.offered ? Kirigami.MessageType.Warning
                         : Kirigami.MessageType.Information
+                    icon.name: type === Kirigami.MessageType.Information ? "update-low" : ""
                     text: root.updating ? i18n("Updating…")
                         : root.updateFailed ? i18n("Update failed")
-                            + "<br><small><tt>journalctl -u thinkwatt-mx-update</tt></small>"
-                        : root.offered ? i18n("ThinkWatt MX %1 is available", root.latest)
+                        : root.offered ? i18n("New version available")
+                        : root.stale ? i18n("Service out of date")
                         : i18n("No drivers for this kernel")
                     actions: [
                         Kirigami.Action {
                             visible: !root.updating
-                            icon.name: root.updateFailed ? "view-refresh" : "system-software-update"
+                            tooltip: root.updateFailed ? "journalctl -u thinkwatt-mx-update"
+                                : root.offered ? root.latest : ""
+                            icon.name: root.updateFailed || notice.restarts ? "view-refresh"
+                                : "system-software-update"
                             text: root.updateFailed ? i18n("Retry")
+                                : notice.restarts ? i18n("Restart")
                                 : root.offered ? i18n("Update") : i18n("Build drivers")
-                            onTriggered: root.startUpdate()
+                            onTriggered: notice.restarts ? root.restart() : root.startUpdate()
                         }
                     ]
                 }
@@ -681,6 +728,7 @@ PlasmoidItem {
 
                         PlasmaComponents.ToolTip.text: watcher.registered ? i18n("Stop the service: the ceiling closes and the fan goes back to the EC") : i18n("Start the service")
                         PlasmaComponents.ToolTip.visible: hovered
+                        PlasmaComponents.ToolTip.delay: Kirigami.Units.toolTipDelay
 
                         onToggled: {
                             root.unitCommand(checked ? "StartUnit" : "StopUnit", root.unit);

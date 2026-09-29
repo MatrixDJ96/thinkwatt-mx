@@ -26,8 +26,8 @@
 # The service's policy is three files: the bus policy that lets root own the name and anyone
 # talk to it, the polkit action every property write is checked against, and the polkit rule
 # that lets an active wheel user write without a password, the widget start and stop the unit,
-# and start the update unit. polkitd registers the action as soon as the file lands, and that is
-# checked here; the bus policy is proven by the running service.
+# restart the drivers' unit, and start the update unit. polkitd registers the action as soon as
+# the file lands, and that is checked here; the bus policy is proven by the running service.
 #
 # Run by root, it is thinkwatt-mx-update installing a release: the system part is the same, and
 # the part under $HOME goes to the user in the record, the one who installed first, through
@@ -74,8 +74,9 @@ install_copies() {
     local release
     sudo rm -rf "$PREFIX"
     sudo install -d -m 0755 "$PREFIX/bin" "$PREFIX/kmods"
-    sudo install -m 0755 "$HERE/bin/thinkwatt-mxd" "$HERE/bin/thinkwatt-mx-update" \
-        "$HERE/kmods/swap.sh" "$PREFIX/bin/"
+    sudo install -m 0755 "$HERE/bin/thinkwatt-mx-update" "$HERE/kmods/swap.sh" "$PREFIX/bin/"
+    sed "s|@VERSION@|$version|" "$HERE/bin/thinkwatt-mxd" \
+        | sudo install -m 0755 /dev/stdin "$PREFIX/bin/thinkwatt-mxd"
     for release in "$HERE"/kmods/[0-9]*/; do
         release=$(basename "$release")
         sudo install -d -m 0755 "$PREFIX/kmods/$release"

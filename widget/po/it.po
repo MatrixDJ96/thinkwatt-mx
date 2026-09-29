@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasma_applet_io.github.matrixdj96.thinkwattmx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-29 22:07+0200\n"
+"POT-Creation-Date: 2026-09-30 02:24+0200\n"
 "PO-Revision-Date: 2026-09-19 23:00+0200\n"
 "Last-Translator: Mattia Rombi\n"
 "Language-Team: Italian\n"
@@ -191,6 +191,12 @@ msgstr ""
 msgid "Lap mode active: the ceiling is halved"
 msgstr "Lap mode attiva: il tetto è dimezzato"
 
+msgid "New version available"
+msgstr "Nuova versione disponibile"
+
+msgid "Service out of date"
+msgstr "Servizio non aggiornato"
+
 msgid "%1 · %2 threads"
 msgstr "%1 · %2 thread"
 
@@ -203,14 +209,14 @@ msgstr "Aggiornamento in corso…"
 msgid "Update failed"
 msgstr "Aggiornamento non riuscito"
 
-msgid "ThinkWatt MX %1 is available"
-msgstr "ThinkWatt MX %1 è disponibile"
-
 msgid "No drivers for this kernel"
 msgstr "Nessun driver per questo kernel"
 
 msgid "Retry"
 msgstr "Riprova"
+
+msgid "Restart"
+msgstr "Riavvia"
 
 msgid "Update"
 msgstr "Aggiorna"

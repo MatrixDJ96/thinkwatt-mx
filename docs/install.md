@@ -59,6 +59,11 @@ running kernel, runs that release's `scripts/install.sh` and reloads the drivers
 The service keeps its state: a stopped service stays stopped, and the ceiling and the fan level
 in force are written back. Its log is `journalctl -u thinkwatt-mx-update`.
 
+The popup's title shows the applet's version. When the running service is at another version,
+as after an install from the clone without the restart below, the panel shows the update icon
+and the popup offers a restart of the drivers and the service, which writes back the ceiling
+and the fan level.
+
 A new kernel boots with both units skipped and the stock drivers loaded, since no drivers are
 built for it yet: for an install made from a release, the applet's button builds them;
 otherwise run the commands below.

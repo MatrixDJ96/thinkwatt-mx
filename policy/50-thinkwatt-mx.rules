@@ -1,5 +1,6 @@
 // An active user of the wheel group sets the service's properties without a password, the
-// widget's service switch may start, stop and restart thinkwatt-mx.service, and its update
+// widget's service switch may start, stop and restart thinkwatt-mx.service, its restart button
+// may restart thinkwatt-mx-kmods.service, which restarts the service with it, and its update
 // button may start thinkwatt-mx-update.service, which takes no argument; no other unit and no
 // other verb. Anyone else authenticates as an administrator, per the action's defaults.
 polkit.addRule(function(action, subject) {
@@ -12,6 +13,11 @@ polkit.addRule(function(action, subject) {
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
         action.lookup("unit") == "thinkwatt-mx.service" &&
         ["start", "stop", "restart"].indexOf(action.lookup("verb")) >= 0) {
+        return polkit.Result.YES;
+    }
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "thinkwatt-mx-kmods.service" &&
+        action.lookup("verb") == "restart") {
         return polkit.Result.YES;
     }
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
