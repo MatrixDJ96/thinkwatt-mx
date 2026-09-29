@@ -12,7 +12,7 @@ kmods/build.sh                       # drivers for the running kernel into kmods
 scripts/install.sh                   # copies, units, SELinux rule, policy, applet; no start
 sudo systemctl restart thinkwatt-mx  # the service runs the freshly installed copy
 scripts/check.sh                     # every gate: width, lint, format, locale, fan test
-scripts/check.sh --self-test         # the linters and the width guard refuse bad input
+scripts/check.sh --self-test         # the linters, width guard and locale gate refuse bad input
 ```
 
 - `kmods/build.sh` needs the kernel headers and the network.

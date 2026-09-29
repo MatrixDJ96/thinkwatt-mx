@@ -82,20 +82,20 @@ def main(argv):
     for name, want, forced, *temperatures in CASES:
         got = settles_at(forced, *temperatures)
         if got == want:
-            print(f"OK:   {name}")
+            ocd.log(f"OK:   {name}")
         else:
-            print(f"FAIL: {name}: expected {want}, got {got}")
+            ocd.log(f"FAIL: {name}: expected {want}, got {got}")
             failures += 1
     if self_test:
         if failures:
-            print(f"OK:   self-test, the superseded condition breaks {failures} cases")
+            ocd.log(f"OK:   self-test, the superseded condition breaks {failures} cases")
             return 0
-        print("FAIL: self-test, the superseded condition breaks nothing: the test is blind")
+        ocd.log("FAIL: self-test, the superseded condition breaks nothing: the test is blind")
         return 1
     if failures:
-        print(f"FAIL: {failures} cases")
+        ocd.log(f"FAIL: {failures} cases")
         return 1
-    print(f"OK: fan curve, {len(CASES)} cases")
+    ocd.log(f"OK: fan curve, {len(CASES)} cases")
     return 0
 
 

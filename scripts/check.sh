@@ -4,12 +4,12 @@
 #
 # Usage: scripts/check.sh [--self-test]
 #   (no argument)  run the gates over the tree
-#   --self-test    feed the linters and this script's width guard known-bad input and require
-#                  each to refuse it
+#   --self-test    feed the linters, this script's width guard and the locale gate known-bad
+#                  input and require each to refuse it
 #
 # Exit status: 0 every gate green, 1 one of them is not.
 #
-# It needs shellcheck, shfmt, gettext and ruff on PATH.
+# It needs shellcheck, shfmt, gettext, ruff and a python3 with PyGObject on PATH.
 
 set -euo pipefail
 
@@ -26,8 +26,8 @@ gate() {
         printf 'OK:   %s\n' "$name"
         return 0
     fi
-    printf 'FAIL: %s\n' "$name"
-    printf '%s\n' "$output" | sed 's/^/      /'
+    printf 'FAIL: %s\n' "$name" >&2
+    printf '%s\n' "$output" | sed 's/^/      /' >&2
     failures=$((failures + 1))
 }
 
@@ -52,27 +52,39 @@ too_wide() {
 
 if [ "${1:-}" = --self-test ]; then
     bad=$(mktemp --suffix=.sh)
-    trap 'rm -f "$bad"' EXIT
+    copy=$(mktemp -d)
+    trap 'rm -rf "$bad" "$copy"' EXIT
     printf '#!/usr/bin/env bash\nif [ $undefined == x ]\nthen\n  echo $1\nfi\n' > "$bad"
     if shellcheck --severity=warning "$bad" > /dev/null 2>&1; then
-        printf 'FAIL: self-test, shellcheck accepted bad input\n'
+        printf 'FAIL: self-test, shellcheck accepted bad input\n' >&2
         exit 1
     fi
     if shfmt -d -i 4 -ci -bn -sr "$bad" > /dev/null 2>&1; then
-        printf 'FAIL: self-test, shfmt accepted malformed input\n'
+        printf 'FAIL: self-test, shfmt accepted malformed input\n' >&2
         exit 1
     fi
     printf 'import os\nprint(undefined)\n' > "$bad"
     if ruff check --no-cache "$bad" > /dev/null 2>&1; then
-        printf 'FAIL: self-test, ruff accepted an unused import and an undefined name\n'
+        printf 'FAIL: self-test, ruff accepted an unused import and an undefined name\n' >&2
         exit 1
     fi
     printf '%s\n' "$(printf 'x%.0s' {1..101})" > "$bad"
     if too_wide "$bad" > /dev/null 2>&1; then
-        printf 'FAIL: self-test, too_wide accepted a 101-column line\n'
+        printf 'FAIL: self-test, too_wide accepted a 101-column line\n' >&2
         exit 1
     fi
-    printf 'OK:   self-test, linters and the width guard refuse bad input\n'
+    # The locale gate reads widget/po, so it runs on a copy: first as it is, then broken.
+    cp -r widget "$copy/"
+    if ! "$copy/widget/build-locale.sh" --check > /dev/null 2>&1; then
+        printf 'FAIL: self-test, the locale gate refused the tree catalogues\n' >&2
+        exit 1
+    fi
+    printf 'msgid "a"\nmsgstr "b\n' >> "$copy/widget/po/it.po"
+    if "$copy/widget/build-locale.sh" --check > /dev/null 2>&1; then
+        printf 'FAIL: self-test, the locale gate accepted a broken catalogue\n' >&2
+        exit 1
+    fi
+    printf 'OK:   self-test, linters, the width guard and the locale gate refuse bad input\n'
     exit 0
 fi
 
@@ -91,7 +103,7 @@ gate "fan curve test" ./tests/fan_curve.py
 gate "fan curve self-test" ./tests/fan_curve.py --self-test
 
 if [ "$failures" -gt 0 ]; then
-    printf 'FAIL: %s gates red\n' "$failures"
+    printf 'FAIL: %s gates red\n' "$failures" >&2
     exit 1
 fi
 
