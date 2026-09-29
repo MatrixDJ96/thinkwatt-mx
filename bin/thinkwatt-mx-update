@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Bring this machine to the latest published release of thinkwatt-mx, or rebuild the installed
+# release for a kernel that has no drivers yet. thinkwatt-mx-update.service runs it as root.
+#
+# Usage: thinkwatt-mx-update
+#
+# Exit status: 0 up to date or installed, 1 a step refused. A refusal before install.sh leaves
+# the system as it was; one inside it leaves what a failed manual install leaves, and no record.
+#
+# Only a newer release is offered, and the installed version is rebuilt for a new kernel only
+# when it was installed from its release tag: a clone ahead of its release keeps its own code.
+# The release is cloned into the unit's private /tmp and installed by its own scripts/install.sh,
+# the same files in the same places as a manual install; the recorded user reads the clone to
+# install the applet. A restart of the service resets Ceiling and FanLevel, so the values in force
+# are written back.
+
+set -euo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+readonly HERE
+readonly RECORD=$HERE/installed
+readonly REPO=MatrixDJ96/thinkwatt-mx
+readonly BUS=io.github.matrixdj96.ThinkwattMX
+readonly OBJECT=/io/github/matrixdj96/ThinkwattMX
+
+fail() {
+    printf 'FAIL: %s\n' "$1" >&2
+    exit 1
+}
+
+version=$(sed -n 's/^version=//p' "$RECORD" 2> /dev/null || true)
+if [ -z "$version" ]; then
+    fail "no version in $RECORD: install from the clone"
+fi
+release=$(sed -n 's/^release=//p' "$RECORD")
+missing=
+if [ ! -f "$HERE/kmods/$(uname -r)/amd-pmf.ko" ]; then
+    missing=yes
+fi
+latest=$(curl -sSfL "https://api.github.com/repos/$REPO/releases/latest" \
+    | python3 -c 'import json, sys; print(json.load(sys.stdin)["tag_name"])') \
+    || fail "no latest release from api.github.com"
+
+newest=$(printf '%s\n' "v$version" "$latest" | sort -V | tail -n 1)
+if [ "$latest" != "v$version" ] && [ "$newest" = "$latest" ]; then
+    tag=$latest
+elif [ -z "$missing" ]; then
+    printf 'OK: up to date at v%s\n' "$version"
+    exit 0
+elif [ "$newest" != "$latest" ]; then
+    fail "v$version is not published: install from the clone"
+elif [ "$release" != "v$version" ]; then
+    fail "v$version was installed from a commit that is not its release: install from the clone"
+else
+    tag=v$version
+fi
+printf 'OK:   installing %s\n' "$tag"
+
+work=$(mktemp -d)
+chmod 0755 "$work"
+git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$tag" \
+    "https://github.com/$REPO.git" "$work/src" \
+    || fail "no $tag at github.com/$REPO"
+"$work/src/kmods/build.sh"
+
+# install.sh replaces the prefix under a running service, as a manual install does, so a refusal
+# there leaves the service as it was. The stop and the start are explicit: a restart of the
+# kmods unit restarts a running service too, but returns before it is on the bus again.
+active=
+if systemctl is-active --quiet thinkwatt-mx; then
+    active=yes
+    ceiling=$(busctl get-property "$BUS" "$OBJECT" "$BUS" Ceiling | cut -d' ' -f2)
+    fan=$(busctl get-property "$BUS" "$OBJECT" "$BUS" FanLevel | cut -d' ' -f2 | tr -d '"')
+fi
+"$work/src/scripts/install.sh"
+systemctl stop thinkwatt-mx
+systemctl restart thinkwatt-mx-kmods
+if [ -n "$active" ] || [ -n "$missing" ]; then
+    systemctl start thinkwatt-mx
+fi
+if [ "${ceiling:-0}" != 0 ] \
+    && ! busctl set-property "$BUS" "$OBJECT" "$BUS" Ceiling u "$ceiling"; then
+    printf 'FAIL: Ceiling %s not written back\n' "$ceiling" >&2
+fi
+if [ -n "${fan:-}" ] && [ "$fan" != curve ] \
+    && ! busctl set-property "$BUS" "$OBJECT" "$BUS" FanLevel s "$fan"; then
+    printf 'FAIL: FanLevel %s not written back\n' "$fan" >&2
+fi
+printf 'OK: %s installed\n' "$tag"

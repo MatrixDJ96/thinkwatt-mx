@@ -16,12 +16,14 @@ scripts/check.sh --self-test         # the linters, width guard and locale gate 
 ```
 
 - `kmods/build.sh` needs the kernel headers and the network.
-- `scripts/install.sh` copies `bin/thinkwatt-mxd`, `kmods/swap.sh` and every `kmods/<release>/`
-  to `/usr/local/libexec/thinkwatt-mx/`: a change in the tree reaches the system only after it
-  and a restart. It always restarts `plasmashell`.
+- `scripts/install.sh` copies `bin/thinkwatt-mxd`, `bin/thinkwatt-mx-update`, `kmods/swap.sh`
+  and every `kmods/<release>/` to `/usr/local/libexec/thinkwatt-mx/`: a change in the tree
+  reaches the system only after it and a restart. It always restarts `plasmashell`.
 - `scripts/check.sh` needs `shellcheck`, `shfmt`, `ruff`, `gettext` and a `python3` with
   PyGObject; CI runs both check commands in a Fedora container on every push and pull request.
 - `busctl` is the service's command line; the interface is `docs/dbus.md`.
+- `sudo systemctl start thinkwatt-mx-update` runs what the applet's update button runs: the
+  latest release, or the drivers for a new kernel (`docs/install.md`).
 
 ## Conventions
 
@@ -67,10 +69,10 @@ scripts/check.sh --self-test         # the linters, width guard and locale gate 
 
 ## Boundaries
 
-- `scripts/install.sh`, `systemctl` on the units, the benches and any write to the service or
-  to sysfs act on the running machine's kernel, fan and power limits: run them only on the
-  owner's go. `scripts/check.sh` and the read-only `busctl get-property` and `ReadFigures`
-  calls need none.
+- `scripts/install.sh`, `systemctl` on the units, `thinkwatt-mx-update.service`, the benches
+  and any write to the service or to sysfs act on the running machine's kernel, fan and power
+  limits: run them only on the owner's go. `scripts/check.sh` and the read-only
+  `busctl get-property` and `ReadFigures` calls need none.
 
 ## Docs
 

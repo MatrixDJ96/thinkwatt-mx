@@ -33,11 +33,13 @@ Enable fan control on the kernel command line, then reboot:
 rpm-ostree kargs --append=thinkpad_acpi.fan_control=1
 ```
 
-Clone the repository and build the patched drivers for the running kernel:
+Clone the repository at its latest release and build the patched drivers for the running
+kernel:
 
 ```bash
 git clone https://github.com/MatrixDJ96/thinkwatt-mx.git
 cd thinkwatt-mx
+git checkout "$(git describe --tags --abbrev=0)"
 kmods/build.sh
 ```
 
@@ -48,7 +50,8 @@ scripts/install.sh
 sudo systemctl start thinkwatt-mx-kmods thinkwatt-mx
 ```
 
-The applet appears in the panel next to the system tray.
+The applet appears in the panel next to the system tray. From then on the applet offers each
+new release, and the drivers for each new kernel, with one click.
 
 ## Documentation
 

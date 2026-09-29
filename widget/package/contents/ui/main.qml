@@ -1,9 +1,10 @@
 // Panel applet for the ThinkPad power envelope: it talks to thinkwatt-mx's service on the system
-// bus through Plasma's own QML module, and to nothing else. The figures come from ReadFigures
-// on this applet's timer, the knobs are the service's properties, whose PropertiesChanged
-// signals move the boxes without waiting for the timer; every write is authorised by polkit
-// for the user seated at the desktop. The profile goes to the power-profiles daemon, the
-// service switch to systemd. Nothing here goes near the SMU.
+// bus through Plasma's own QML module, and asks GitHub once a day for the latest release. The
+// figures come from ReadFigures on this applet's timer, the knobs are the service's properties,
+// whose PropertiesChanged signals move the boxes without waiting for the timer; every write is
+// authorised by polkit for the user seated at the desktop. The profile goes to the
+// power-profiles daemon, the service switch and the update button to systemd. Nothing here goes
+// near the SMU.
 //
 // One entry is this applet's own composition and the service does not know it: performance+
 // is the performance profile with the ceiling open at the configured target. It needs the
@@ -28,6 +29,14 @@ PlasmoidItem {
     readonly property string service: "io.github.matrixdj96.ThinkwattMX"
     readonly property string objectPath: "/io/github/matrixdj96/ThinkwattMX"
     readonly property string unit: "thinkwatt-mx.service"
+    readonly property string updateUnit: "thinkwatt-mx-update.service"
+    // A condition checked and failed is a missing driver; a unit not yet run since boot has
+    // checked nothing.
+    readonly property bool offered: latest !== "" && newer(latest, Plasmoid.metaData.version)
+    readonly property bool driversMissing: plain(kmodsUnit.properties.ConditionResult) === false
+        && Number(plain(kmodsUnit.properties.ConditionTimestamp)) > 0
+    readonly property bool updating: plain(updateState.properties.ActiveState) === "activating"
+    readonly property bool updateFailed: plain(updateState.properties.ActiveState) === "failed"
     readonly property string missing: "—"
     readonly property bool clamped: answered && plain(knobs.properties.LapMode) === true
     // The profile comes from the service while it runs and from the profile daemon otherwise,
@@ -50,6 +59,7 @@ PlasmoidItem {
     // performance+ was picked and the ceiling waits for the profile to reach performance: the
     // service refuses a ceiling under any other profile, and the daemon takes its time.
     property bool wantCeiling: false
+    property string latest: ""
 
     onProfileChanged: pursueCeiling()
     onAnsweredChanged: pursueCeiling()
@@ -139,15 +149,45 @@ PlasmoidItem {
         });
     }
 
-    function unitCommand(member) {
+    function unitCommand(member, name, done) {
         call({
             "service": "org.freedesktop.systemd1",
             "path": "/org/freedesktop/systemd1",
             "iface": "org.freedesktop.systemd1.Manager",
             "member": member,
             "signature": "(ss)",
-            "arguments": [unit, "replace"]
-        }, function () {});
+            "arguments": [name, "replace"]
+        }, done || function () {});
+    }
+
+    // Whether tag vX.Y.Z is newer than version X.Y.Z.
+    function newer(tag, version) {
+        var a = tag.replace(/^v/, "").split(".");
+        var b = String(version).split(".");
+        for (var i = 0; i < Math.max(a.length, b.length); i++) {
+            var step = (Number(a[i]) || 0) - (Number(b[i]) || 0);
+            if (step !== 0) {
+                return step > 0;
+            }
+        }
+        return false;
+    }
+
+    function checkRelease() {
+        var request = new XMLHttpRequest();
+        request.onreadystatechange = function () {
+            if (request.readyState === XMLHttpRequest.DONE && request.status === 200) {
+                root.latest = JSON.parse(request.responseText).tag_name;
+            }
+        };
+        request.open("GET", "https://api.github.com/repos/MatrixDJ96/thinkwatt-mx/releases/latest");
+        request.send();
+    }
+
+    function startUpdate() {
+        unitCommand("StartUnit", updateUnit, function () {
+            updateState.updateAll();
+        });
     }
 
     function setProfile(name) {
@@ -341,9 +381,50 @@ PlasmoidItem {
         iface: "net.hadess.PowerProfiles"
     }
 
+    // systemd loads a unit when its object is read, so these answer before the first update.
+    DBus.Properties {
+        id: kmodsUnit
+
+        busType: DBus.BusType.System
+        service: "org.freedesktop.systemd1"
+        path: "/org/freedesktop/systemd1/unit/thinkwatt_2dmx_2dkmods_2eservice"
+        iface: "org.freedesktop.systemd1.Unit"
+    }
+
+    DBus.Properties {
+        id: updateState
+
+        busType: DBus.BusType.System
+        service: "org.freedesktop.systemd1"
+        path: "/org/freedesktop/systemd1/unit/thinkwatt_2dmx_2dupdate_2eservice"
+        iface: "org.freedesktop.systemd1.Unit"
+    }
+
     // Both maps move on PropertiesChanged; the daemon's is read whole once, the service's at
     // registration and, as a safety net, on the timer while the popup is open.
     Component.onCompleted: powerProfiles.updateAll()
+
+    // The release check: at start and once a day, well inside GitHub's anonymous limit.
+    Timer {
+        interval: 24 * 60 * 60 * 1000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.checkRelease()
+    }
+
+    // systemd sends property signals only once a client has called Subscribe(), so the unit
+    // state is read on this timer while the popup is open.
+    Timer {
+        interval: 2000
+        running: root.expanded
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            kmodsUnit.updateAll();
+            updateState.updateAll();
+        }
+    }
 
     Timer {
         interval: Plasmoid.configuration.interval
@@ -517,6 +598,30 @@ PlasmoidItem {
                 anchors.margins: Kirigami.Units.gridUnit
                 spacing: Kirigami.Units.largeSpacing
 
+                // A new release is offered before missing drivers: its install builds them too.
+                Kirigami.InlineMessage {
+                    Layout.fillWidth: true
+                    visible: root.updating || root.updateFailed || root.offered
+                        || root.driversMissing
+                    type: root.updateFailed ? Kirigami.MessageType.Error
+                        : root.driversMissing && !root.offered ? Kirigami.MessageType.Warning
+                        : Kirigami.MessageType.Information
+                    text: root.updating ? i18n("Updating…")
+                        : root.updateFailed ? i18n("Update failed")
+                            + "<br><small><tt>journalctl -u thinkwatt-mx-update</tt></small>"
+                        : root.offered ? i18n("ThinkWatt MX %1 is available", root.latest)
+                        : i18n("No drivers for this kernel")
+                    actions: [
+                        Kirigami.Action {
+                            visible: !root.updating
+                            icon.name: root.updateFailed ? "view-refresh" : "system-software-update"
+                            text: root.updateFailed ? i18n("Retry")
+                                : root.offered ? i18n("Update") : i18n("Build drivers")
+                            onTriggered: root.startUpdate()
+                        }
+                    ]
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
@@ -578,7 +683,7 @@ PlasmoidItem {
                         PlasmaComponents.ToolTip.visible: hovered
 
                         onToggled: {
-                            root.unitCommand(checked ? "StartUnit" : "StopUnit");
+                            root.unitCommand(checked ? "StartUnit" : "StopUnit", root.unit);
                             checked = Qt.binding(function () {
                                 return watcher.registered;
                             });

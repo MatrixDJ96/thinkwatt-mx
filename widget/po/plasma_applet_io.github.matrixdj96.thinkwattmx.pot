@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasma_applet_io.github.matrixdj96.thinkwattmx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-23 02:15+0200\n"
+"POT-Creation-Date: 2026-09-29 23:09+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -197,6 +197,27 @@ msgid "%1 · %2 threads"
 msgstr ""
 
 msgid "service stopped"
+msgstr ""
+
+msgid "Updating…"
+msgstr ""
+
+msgid "Update failed"
+msgstr ""
+
+msgid "ThinkWatt MX %1 is available"
+msgstr ""
+
+msgid "No drivers for this kernel"
+msgstr ""
+
+msgid "Retry"
+msgstr ""
+
+msgid "Update"
+msgstr ""
+
+msgid "Build drivers"
 msgstr ""
 
 msgid "GHz"

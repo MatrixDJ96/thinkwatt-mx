@@ -2,10 +2,12 @@
 # Prepare everything and start nothing: the service and the patched drivers copied where only
 # root writes, the units enabled, the bus and polkit policy of the service, the Plasma applet.
 #
-# Usage: scripts/install.sh [--uninstall]
+# Usage: scripts/install.sh [--applet | --uninstall]
 #   (no argument)  copy the service and the drivers, label them, install and enable the units,
 #                  lay the service's policy, compile the applet's translations, install and
 #                  place the applet; kmods/build.sh must have run first
+#   --applet       the session's part alone: the applet, its place in the panel and the shell
+#                  restart; the root run hands it to the recorded user
 #   --uninstall    stop, disable and remove the units, the copies and their label, the policy
 #                  and the applet; the tree stays
 #
@@ -23,9 +25,13 @@
 #
 # The service's policy is three files: the bus policy that lets root own the name and anyone
 # talk to it, the polkit action every property write is checked against, and the polkit rule
-# that lets an active wheel user write without a password and the widget start and stop the
-# unit. polkitd registers the action as soon as the file lands, and that is checked here; the
-# bus policy is proven by the running service.
+# that lets an active wheel user write without a password, the widget start and stop the unit,
+# and start the update unit. polkitd registers the action as soon as the file lands, and that is
+# checked here; the bus policy is proven by the running service.
+#
+# Run by root, it is thinkwatt-mx-update installing a release: the system part is the same, and
+# the part under $HOME goes to the user in the record, the one who installed first, through
+# runuser with that user's session bus. The record comes last, so it means a complete install.
 #
 # The applet goes in the panel and not in the tray: the tray hands every compact representation
 # a square icon cell and ignores the width it asks for. A first placement is two steps, because
@@ -41,6 +47,8 @@ readonly PREFIX=/usr/local/libexec/thinkwatt-mx
 readonly MODULE_PATTERN="${PREFIX}/kmods(/.*)?"
 readonly UNIT_DIR=/etc/systemd/system
 readonly UNITS=(thinkwatt-mx-kmods.service thinkwatt-mx.service)
+readonly UPDATE_UNIT=thinkwatt-mx-update.service
+readonly RECORD=$PREFIX/installed
 readonly BUS_POLICY=/etc/dbus-1/system.d/io.github.matrixdj96.ThinkwattMX.conf
 readonly ACTION=io.github.matrixdj96.ThinkwattMX.set
 readonly ACTIONS=/etc/polkit-1/actions/io.github.matrixdj96.ThinkwattMX.policy
@@ -66,7 +74,8 @@ install_copies() {
     local release
     sudo rm -rf "$PREFIX"
     sudo install -d -m 0755 "$PREFIX/bin" "$PREFIX/kmods"
-    sudo install -m 0755 "$HERE/bin/thinkwatt-mxd" "$HERE/kmods/swap.sh" "$PREFIX/bin/"
+    sudo install -m 0755 "$HERE/bin/thinkwatt-mxd" "$HERE/bin/thinkwatt-mx-update" \
+        "$HERE/kmods/swap.sh" "$PREFIX/bin/"
     for release in "$HERE"/kmods/[0-9]*/; do
         release=$(basename "$release")
         sudo install -d -m 0755 "$PREFIX/kmods/$release"
@@ -87,20 +96,25 @@ remove_copies() {
     printf 'OK:   copies and their label removed\n'
 }
 
+# The update unit is installed and never enabled. A failed run stays on record until reset, and
+# this install supersedes it.
 install_units() {
     local unit
-    for unit in "${UNITS[@]}"; do
+    for unit in "${UNITS[@]}" "$UPDATE_UNIT"; do
         sed "s|@PREFIX@|$PREFIX|g" "$HERE/systemd/$unit" | sudo tee "$UNIT_DIR/$unit" > /dev/null
     done
     sudo systemctl daemon-reload
     sudo systemctl enable "${UNITS[@]}"
+    if systemctl is-failed --quiet "$UPDATE_UNIT"; then
+        sudo systemctl reset-failed "$UPDATE_UNIT"
+    fi
     printf 'OK:   units installed and enabled, not started\n'
 }
 
 remove_units() {
     local unit
     sudo systemctl disable --now "${UNITS[@]}" 2> /dev/null || true
-    for unit in "${UNITS[@]}"; do
+    for unit in "${UNITS[@]}" "$UPDATE_UNIT"; do
         sudo rm -f "$UNIT_DIR/$unit"
     done
     sudo systemctl daemon-reload
@@ -198,7 +212,6 @@ remove_applet() {
 
 install_applet() {
     local containment=$1 tray=$2 placed=yes number order
-    "$HERE/widget/build-locale.sh" --compile
     if applet_installed; then
         kpackagetool6 --type Plasma/Applet --upgrade "$HERE/widget/package"
     else
@@ -227,27 +240,64 @@ install_applet() {
         "$(applet_order "$containment")"
 }
 
-read -r containment tray <<< "$(panel_with_tray)"
+# The session's part: everything that reads or writes $HOME, run as the desktop user.
+applet() {
+    local containment tray
+    read -r containment tray <<< "$(panel_with_tray)"
+    if [ -z "$tray" ]; then
+        fail "no panel with a system tray in $APPLETSRC"
+    fi
+    install_applet "$containment" "$tray"
+}
 
-if [ "${1:-}" = --uninstall ]; then
-    remove_applet "$containment"
-    remove_units
-    remove_copies
-    remove_policy
-    printf 'OK: units, copies, policy and applet removed; the tree stays\n'
-    exit 0
-fi
-
-if [ -z "$tray" ]; then
-    fail "no panel with a system tray in $APPLETSRC"
-fi
+case "${1:-}" in
+    --applet)
+        applet
+        exit 0
+        ;;
+    --uninstall)
+        read -r containment _ <<< "$(panel_with_tray)"
+        remove_applet "$containment"
+        remove_units
+        remove_copies
+        remove_policy
+        printf 'OK: units, copies, policy and applet removed; the tree stays\n'
+        exit 0
+        ;;
+esac
 
 if [ ! -f "$HERE/kmods/$(uname -r)/amd-pmf.ko" ]; then
     fail "no patched drivers for $(uname -r): run kmods/build.sh first"
 fi
 
+if [ "$(id -u)" = 0 ]; then
+    user=$(sed -n 's/^user=//p' "$RECORD" 2> /dev/null || true)
+    if [ -z "$user" ]; then
+        fail "no user in $RECORD: the first install is run by the desktop user"
+    fi
+else
+    user=$(id -un)
+    read -r containment tray <<< "$(panel_with_tray)"
+    if [ -z "$tray" ]; then
+        fail "no panel with a system tray in $APPLETSRC"
+    fi
+fi
+version=$(sed -n 's/.*"Version": "\([^"]*\)".*/\1/p' "$HERE/widget/package/metadata.json")
+# The release tag this tree is, clean, or nothing: only a release is rebuilt by the updater.
+release=$(git -C "$HERE" describe --tags --exact-match --dirty 2> /dev/null || true)
+
+"$HERE/widget/build-locale.sh" --compile
 install_copies
 install_units
 install_policy
-install_applet "$containment" "$tray"
-printf 'OK: installed from %s; nothing started\n' "$HERE"
+if [ "$(id -u)" = 0 ]; then
+    uid=$(id -u "$user")
+    runuser -u "$user" -- env HOME="$(getent passwd "$user" | cut -d: -f6)" \
+        XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+        "$HERE/scripts/install.sh" --applet
+else
+    install_applet "$containment" "$tray"
+fi
+printf 'user=%s\nversion=%s\nrelease=%s\n' "$user" "$version" "$release" \
+    | sudo tee "$RECORD" > /dev/null
+printf 'OK: v%s installed from %s for %s; nothing started\n' "$version" "$HERE" "$user"

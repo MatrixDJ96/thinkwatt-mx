@@ -1,0 +1,12 @@
+[Unit]
+Description=ThinkWatt MX: install the latest release, or rebuild the drivers for this kernel
+Documentation=https://github.com/MatrixDJ96/thinkwatt-mx/blob/main/docs/install.md
+
+[Service]
+Type=oneshot
+ExecStart=@PREFIX@/bin/thinkwatt-mx-update
+# The release is cloned into this /tmp, which systemd removes when the unit stops.
+PrivateTmp=yes
+# systemd sets HOME only for units with User=, and install.sh reads it under set -u.
+Environment=HOME=/root
+TimeoutStartSec=15min

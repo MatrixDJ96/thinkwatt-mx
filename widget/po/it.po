@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasma_applet_io.github.matrixdj96.thinkwattmx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-23 01:58+0200\n"
+"POT-Creation-Date: 2026-09-29 22:07+0200\n"
 "PO-Revision-Date: 2026-09-19 23:00+0200\n"
 "Last-Translator: Mattia Rombi\n"
 "Language-Team: Italian\n"
@@ -103,7 +103,8 @@ msgid "Panel"
 msgstr "Pannello"
 
 msgid "Drag to reorder, click to pick a colour, right-click to reset it"
-msgstr "Trascina per riordinare, clic per il colore, clic destro per ripristinarlo"
+msgstr ""
+"Trascina per riordinare, clic per il colore, clic destro per ripristinarlo"
 
 msgid "No reading selected"
 msgstr "Nessuna lettura selezionata"
@@ -195,6 +196,27 @@ msgstr "%1 · %2 thread"
 
 msgid "service stopped"
 msgstr "servizio fermo"
+
+msgid "Updating…"
+msgstr "Aggiornamento in corso…"
+
+msgid "Update failed"
+msgstr "Aggiornamento non riuscito"
+
+msgid "ThinkWatt MX %1 is available"
+msgstr "ThinkWatt MX %1 è disponibile"
+
+msgid "No drivers for this kernel"
+msgstr "Nessun driver per questo kernel"
+
+msgid "Retry"
+msgstr "Riprova"
+
+msgid "Update"
+msgstr "Aggiorna"
+
+msgid "Build drivers"
+msgstr "Compila i driver"
 
 msgid "GHz"
 msgstr ""

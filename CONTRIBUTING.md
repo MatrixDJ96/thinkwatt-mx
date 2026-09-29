@@ -68,5 +68,7 @@ plasmawindowed io.github.matrixdj96.thinkwattmx
 - Follow the conventions in [`AGENTS.md`](AGENTS.md). The file is written for coding agents and
   applies to people as well.
 - Keep one commit per change, with a subject in the style of the history.
+- A release tag names the `metadata.json` Version of its commit (`v1.0.2` is
+  `Bumped package version to 1.0.2`): the updater compares the two.
 - Nothing may talk to the SMU except through the kernel's drivers, `amd_pmf` and `amdgpu`
   ([`docs/smu.md`](docs/smu.md)).

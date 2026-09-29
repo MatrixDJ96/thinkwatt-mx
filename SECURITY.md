@@ -3,6 +3,10 @@
 The service runs as root and the patched drivers run in the kernel, so a vulnerability can give
 a local user root privileges.
 
+The updater runs as root and installs the latest release published on GitHub when an active
+`wheel` user asks, with no password, and releases are not signed, so the GitHub repository is
+part of what a vulnerability report can concern.
+
 ## Reporting a vulnerability
 
 Report it privately through GitHub's
