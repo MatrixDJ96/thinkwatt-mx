@@ -36,9 +36,10 @@ on the AML interpreter, on `acpi_ds_begin_method_execution` and
 end. At the end the table is in the SMU: `stt_tables` counts one and notifies its readers, and
 inotify sees the change. The probes compare two pointers and touch no mailbox.
 
-Writing `0` restores the target in force before the override. On the static slider that is the
-slider's value. Otherwise, on the V1 interface, it is the value the driver read from the SMU at
-the first override, because the BIOS does not send its table again for an unchanged slider.
+Writing `0` puts back the BIOS table's target. On the static slider that is the slider's value.
+Otherwise, on the V1 interface, it is the target of the latest BIOS table: before the driver
+sends the override over a table that has landed since its last send, it reads the SMU's target.
+The BIOS does not send its table again for an unchanged slider, so the driver keeps that value.
 
 ## `thinkpad_acpi`: lap mode
 

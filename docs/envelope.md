@@ -69,4 +69,5 @@ The patched `amd_pmf` sees every run of `DSTT`, whatever calls it, and counts it
 `stt_tables` ([`kernel.md`](kernel.md)). The service writes the target again after each table
 and after each event it can see ([`dbus.md`](dbus.md#events)).
 
-Writing `0` to `stt_skin_temp_apu` restores the value the SMU held before the first write.
+Writing `0` to `stt_skin_temp_apu` puts back the latest table's target
+([`kernel.md`](kernel.md)).

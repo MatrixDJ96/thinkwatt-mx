@@ -45,7 +45,7 @@ SPDX-License-Identifier: GPL-2.0-only
  #include <linux/mutex_types.h>
  #include <linux/platform_device.h>
  #include <linux/platform_profile.h>
-@@ -401,6 +402,14 @@ struct amd_pmf_dev {
+@@ -401,6 +402,15 @@ struct amd_pmf_dev {
  	struct mutex lock; /* protects the PMF interface */
  	u32 supported_func;
  	enum platform_profile_option current_profile;
@@ -57,10 +57,11 @@ SPDX-License-Identifier: GPL-2.0-only
 +	struct kprobe stt_end_probe;
 +	struct work_struct stt_table_work;
 +	u32 stt_tables; /* BIOS STT tables sent since load */
++	bool stt_table_fresh; /* a BIOS table landed since the override was last sent */
  	struct device *ppdev; /* platform profile class device */
  	struct dentry *dbgfs_dir;
  	int hb_interval; /* SBIOS heartbeat interval */
-@@ -912,6 +921,10 @@ int amd_pmf_init_cnqf(struct amd_pmf_dev *dev);
+@@ -912,6 +922,10 @@ int amd_pmf_init_cnqf(struct amd_pmf_dev *dev);
  void amd_pmf_deinit_cnqf(struct amd_pmf_dev *dev);
  int amd_pmf_trans_cnqf(struct amd_pmf_dev *dev, int socket_power, ktime_t time_lapsed_ms);
  extern const struct attribute_group cnqf_feature_attribute_group;
@@ -93,15 +94,23 @@ SPDX-License-Identifier: GPL-2.0-only
  				 NULL);
  		amd_pmf_send_cmd(dev, SET_STT_LIMIT_HS2, SET_CMD,
  				 fixp_q88_fromint(config_store.prop[src][idx].stt_skin_temp[STT_TEMP_HS2]),
-@@ -286,6 +288,248 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
+@@ -286,6 +288,258 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
  	return pmf->current_profile == PLATFORM_PROFILE_BALANCED;
  }
  
-+/* Sends the override, if one is set, on the PMF mailbox. */
++/*
++ * Sends the override, if one is set, on the PMF mailbox. A BIOS table that
++ * landed since the last send holds the SMU's target now: on the V1 interface
++ * its value is read first, so that 0 puts back the latest table's target.
++ */
 +void amd_pmf_apply_stt_override(struct amd_pmf_dev *pmf)
 +{
 +	if (!pmf->stt_apu_override)
 +		return;
++	if (pmf->pmf_if_version == PMF_IF_V1 && READ_ONCE(pmf->stt_table_fresh)) {
++		WRITE_ONCE(pmf->stt_table_fresh, false);
++		amd_pmf_send_cmd(pmf, GET_STT_LIMIT_APU, GET_CMD, ARG_NONE, &pmf->stt_apu_table);
++	}
 +	amd_pmf_send_cmd(pmf, SET_STT_LIMIT_APU, SET_CMD,
 +			 fixp_q88_fromint(pmf->stt_apu_override), NULL);
 +}
@@ -112,9 +121,10 @@ SPDX-License-Identifier: GPL-2.0-only
 + * where the platform has it or by the SBIOS on the OS power slider update.
 + * A non-zero value here is sent at once and again after every such push the
 + * driver makes; 0 stops that and puts the table back at once: the static
-+ * slider's own value where the platform has one, otherwise the value the SMU
-+ * reported before the override began, since the SBIOS does not push its table
-+ * again for a slider position that has not moved.
++ * slider's own value where the platform has one, otherwise the target of the
++ * latest BIOS table, read from the SMU before the override went over it, since
++ * the SBIOS does not push its table again for a slider position that has not
++ * moved.
 + */
 +static ssize_t stt_skin_temp_apu_show(struct device *dev,
 +				      struct device_attribute *attr, char *buf)
@@ -252,6 +262,7 @@ SPDX-License-Identifier: GPL-2.0-only
 +
 +	if (desc && (void *)regs_get_kernel_argument(regs, 0) == desc) {
 +		WRITE_ONCE(pmf->stt_tables, pmf->stt_tables + 1);
++		WRITE_ONCE(pmf->stt_table_fresh, true);
 +		schedule_work(&pmf->stt_table_work);
 +	}
 +	return 0;
@@ -342,7 +353,7 @@ SPDX-License-Identifier: GPL-2.0-only
  static int amd_pmf_profile_get(struct device *dev,
  			       enum platform_profile_option *profile)
  {
-@@ -390,6 +634,8 @@ static int amd_pmf_profile_set(struct device *dev,
+@@ -390,6 +644,8 @@ static int amd_pmf_profile_set(struct device *dev,
  			return ret;
  	}
  
