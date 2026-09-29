@@ -24,6 +24,9 @@ fan to the EC.
 | `Profile`  | `s`  | ro     | the current `platform_profile`                             |
 | `LapMode`  | `b`  | ro     | the content of `dytc_lapmode`, as the service last read it |
 
+A read of `CpuMode` or `GpuMode` can also give a value another writer set: `<governor>/<epp>`,
+or amdgpu's own level name.
+
 `Ceiling` lives only in the service's memory, so a restart or a reboot resets it to `0`. When
 the profile leaves `performance`, the service sets `Ceiling` to `0` itself.
 
@@ -33,14 +36,19 @@ then change without a `PropertiesChanged` signal.
 The profile is read-only here. It belongs to `tuned-ppd`: write it to
 `net.hadess.PowerProfiles`, as the applet does.
 
-A refused write returns one of these errors, prefixed with `io.github.matrixdj96.ThinkwattMX.`:
+A write to a read-only property, or of the wrong type, gets GDBus's own
+`org.freedesktop.DBus.Error` reply. Any other refused write returns one of these errors,
+prefixed with `io.github.matrixdj96.ThinkwattMX.`:
 
 | error                 | cause                                                      |
 | --------------------- | ---------------------------------------------------------- |
 | `Error.InvalidValue`  | a value outside the list or range above                    |
 | `Error.Profile`       | a non-zero `Ceiling` outside `performance`                 |
-| `Error.Failed`        | a sysfs read or write failed; the property keeps its value |
+| `Error.Failed`        | a sysfs read or write failed                               |
 | `Error.NotAuthorized` | polkit refused the caller                                  |
+
+A refused `Ceiling` keeps its value. `CpuMode` and `GpuMode` write several files in turn, and a
+failure leaves the ones before it written.
 
 ## Methods
 
@@ -87,6 +95,7 @@ ones no other event announces ([`kernel.md`](kernel.md)). The service does not w
 while lap mode reads `1`; the change back to `0` comes after the firmware's own write
 ([`lapmode.md`](lapmode.md)).
 
-The service never keeps a sysfs file open, and it reads `platform_profile` only after 500 ms
-without notifications. `tuned-ppd` decides whether a profile change came from the Fn key by
-watching who opens that file. A read during its own write makes it restore the old profile.
+The service never keeps a sysfs file open, and after its start it reads `platform_profile` only
+after 500 ms without notifications. `tuned-ppd` decides whether a profile change came from the
+Fn key by watching who opens that file. A read during its own write makes it restore the old
+profile.

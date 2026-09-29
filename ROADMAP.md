@@ -2,15 +2,18 @@
 
 ## Firmware
 
-- **When `_Q3E` fires.** This EC query sends a firmware table when EC register `MAXP` reads
-  `0`; what the register holds is unknown. The service writes the target back after each table.
-  A `firmware table` log line with no event beside it gives the time of a table no event
-  announces, `_Q3E`'s or another path's ([`docs/envelope.md`](docs/envelope.md)).
-- **Lid and suspend.** Neither path sends a table in the DSDT. Whether the target survives a
-  resume has not been checked.
+- **When `_Q3E` and `_Q40` fire.** `_Q3E` sends a firmware table when EC register `MAXP` reads
+  `0`; what the register holds is unknown. `_Q40` sends one on a thermal status change. The
+  service writes the target back after each table. A `firmware table` log line with no event
+  beside it gives the time of a table no event announces, from either query or another path
+  ([`docs/envelope.md`](docs/envelope.md)).
+- **Suspend.** The lid sends no table in the DSDT, and this machine suspends to `s2idle`, which
+  runs no `_WAK`. Whether the SMU keeps the target across an `s2idle` resume has not been
+  checked. A resume from hibernation runs `_WAK`, which sends tables through `DYTC`.
 - **The EC's lap mode criterion.** Reading EC register `0xC4` when lap mode appears needs a
-  tool this kernel lacks: no `ec_sys`, no `/sys/kernel/debug/ec`. The same tool would read
-  `DYTC(0x02)`, which tells whether DYTC is on ([`docs/lapmode.md`](docs/lapmode.md)).
+  tool this kernel lacks: no `ec_sys`, no `/sys/kernel/debug/ec`. The kernel exports `ec_read`,
+  so the patched `thinkpad_acpi` could expose the register read-only, and `DYTC(0x02)` with it,
+  which tells whether DYTC is on ([`docs/lapmode.md`](docs/lapmode.md)).
 
 ## Measurements
 

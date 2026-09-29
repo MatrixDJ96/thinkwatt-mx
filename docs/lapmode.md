@@ -46,9 +46,10 @@ the same `DYTC` path as the EC's event. The service should log `lap mode 1: clea
 
 | attempt                      | result                                                                            |
 | ---------------------------- | --------------------------------------------------------------------------------- |
-| `DYTC_CMD_RESET` (`0x1FF`)   | lap mode stays, and DYTC turns off: the low table stays in force                  |
+| `DYTC_CMD_RESET` (`0x1FF`)   | the limits stay at lap mode's, `dytc_lapmode` keeps `1`, and DYTC turns off       |
 | BIOS option `CoolQuietOnLap` | clears one declaration bit; lap mode still applies ([`firmware.md`](firmware.md)) |
 
-`thinkpad_acpi` says `DYTC_CMD_RESET` holds lap mode at 0 for about 30 minutes. On this machine
-it does not. To turn DYTC back on after a reset, set the profile to `balanced` and then back to
-`performance`.
+The reset runs `DCRE`, which clears `VCQL` and sends table 7 or 17, the `balanced` table, whose
+limits equal lap mode's. It raises no HKEY event `0x6032`, and `thinkpad_acpi` refreshes
+`dytc_lapmode` only on that event, so the attribute keeps its last value. To turn DYTC back on
+after a reset, set the profile to `balanced` and then back to `performance`.

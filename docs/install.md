@@ -14,14 +14,15 @@
 
 On other systems the build or the installer stops at a known point:
 
-| system                    | what happens                                             |
-| ------------------------- | -------------------------------------------------------- |
-| a kernel other than OGC   | `kmods/build.sh` fails                                   |
-| `power-profiles-daemon`   | untested                                                 |
-| no SELinux                | `scripts/install.sh` fails at `semanage`                 |
-| no `qdbus-qt6`            | `scripts/install.sh` fails when placing the applet       |
-| `sudo` group, not `wheel` | changes ask for an administrator password                |
-| Secure Boot enforcing     | the kernel rejects the drivers and the service stays off |
+| system                    | what happens                                               |
+| ------------------------- | ---------------------------------------------------------- |
+| a kernel other than OGC   | `kmods/build.sh` fails                                     |
+| `power-profiles-daemon`   | untested                                                   |
+| no SELinux                | `scripts/install.sh` fails at `semanage`                   |
+| no `qdbus-qt6`            | `scripts/install.sh` fails when it first places the applet |
+| no `gettext`              | `scripts/install.sh` fails when compiling the translations |
+| `sudo` group, not `wheel` | changes ask for an administrator password                  |
+| Secure Boot enforcing     | the kernel rejects the drivers and the service stays off   |
 
 ## Risks
 
@@ -66,7 +67,8 @@ scripts/install.sh --uninstall
 ```
 
 This removes the units, the installed copies, the SELinux rule, the policy files and the
-applet. The cloned repository stays.
+applet. The cloned repository stays. The patched drivers stay loaded until the next boot, and
+the kernel argument stays until `rpm-ostree kargs --delete=thinkpad_acpi.fan_control=1`.
 
 ## Problems
 

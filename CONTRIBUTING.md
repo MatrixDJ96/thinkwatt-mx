@@ -68,5 +68,5 @@ plasmawindowed io.github.matrixdj96.thinkwattmx
 - Follow the conventions in [`AGENTS.md`](AGENTS.md). The file is written for coding agents and
   applies to people as well.
 - Keep one commit per change, with a subject in the style of the history.
-- Nothing may talk to the SMU except through the `amd_pmf` driver
+- Nothing may talk to the SMU except through the kernel's drivers, `amd_pmf` and `amdgpu`
   ([`docs/smu.md`](docs/smu.md)).

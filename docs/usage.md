@@ -19,7 +19,8 @@ The fan starts on `curve`, which follows the CPU temperature. `auto` gives the f
 embedded controller ([`fan.md`](fan.md)).
 
 The **Service** button starts and stops the service. When it is stopped, `performance+` and the
-fan levels other than `auto` are greyed out, and the firmware's own limits apply.
+fan levels other than `auto` are greyed out, the CPU and GPU selectors are disabled, and the
+firmware's own limits apply.
 
 The Fn key still changes the profile. Leaving `performance` closes `performance+`.
 

@@ -44,17 +44,21 @@ amdgpu: GPU Recovery Failed: -62
 
 ## The rule
 
-Nothing in ThinkWatt MX writes to the SMU except through `amd_pmf`:
+ThinkWatt MX reaches the SMU only through the two kernel drivers the firmware expects, each
+under its own lock:
 
-| task            | how                                                        |
-| --------------- | ---------------------------------------------------------- |
-| skin target     | `amd_pmf`'s `stt_skin_temp_apu` ([`kernel.md`](kernel.md)) |
-| limits, metrics | `amd_pmf`'s `power_limits` and `metrics`, read on demand   |
-| fan loop        | Tctl from `k10temp`                                        |
-| SoC power       | amdgpu's `power1_average`                                  |
+| task            | how                                                                   |
+| --------------- | --------------------------------------------------------------------- |
+| skin target     | `amd_pmf`'s `stt_skin_temp_apu` ([`kernel.md`](kernel.md))            |
+| limits, metrics | `amd_pmf`'s `power_limits` and `metrics`, read on demand              |
+| GPU level       | amdgpu's `power_dpm_force_performance_level` and `pp_dpm_sclk`        |
+| GPU readings    | amdgpu's `power1_average`, `freq1_input` and `temp1_input`, on demand |
+| fan loop        | Tctl from `k10temp`                                                   |
 
-The service never reads the SMU on a timer. It writes the target only while `Ceiling` is set,
-once per kernel event.
+The service has no timer on the SMU. It writes the target only while `Ceiling` is set, once per
+kernel event. amdgpu refreshes its readings from the SMU, on its own mailbox, when they are
+more than 1 ms old, so each `ReadFigures` call reads the SMU through amdgpu: the applet calls
+it every 500 ms by default.
 
 Do not run `ryzenadj`, or any tool that opens `ryzen_smu`, while ThinkWatt MX is installed.
 Some images load `ryzen_smu` at boot; ThinkWatt MX never opens it.

@@ -54,20 +54,25 @@ fast and PPT slow. Each value measured on this machine is one of these entries:
 | 3, 13  | 31 °C     | 14 W  | 30 W     | 25 W     | lap mode    |
 | 8, 18  | 37 °C     | 22 W  | 43 W     | 33 W     | performance |
 | 7, 17  | 31, 33 °C | 14 W  | 30 W     | 25 W     | balanced    |
-| 4, 14  | 0 °C      | 6 W   | 6 W      | 6 W      | emergency   |
+| 4, 14  | not sent  | 6 W   | 6 W      | 6 W      | emergency   |
 
-No table allows more than 22 W of STAPM, so no BIOS option gives more.
+`DSTT` skips a zero entry, so tables 4 and 14 leave the skin target as it was. No table allows
+more than 22 W of STAPM, so no BIOS option gives more.
 
 ## The firmware takes the target back
 
 The firmware sends a table again on several events: a profile change, a power-source change, a
-battery change and a lap mode change. The EC query `_Q3E` also calls `DSTT` when EC register
-`MAXP` reads `0`, at times that are not known ([`../ROADMAP.md`](../ROADMAP.md)), and raises no
-event.
+battery change and a lap mode change. Two EC queries send one without an event the service
+sees, at times that are not known ([`../ROADMAP.md`](../ROADMAP.md)):
+
+- `_Q3E` calls `DSTT` when EC register `MAXP` reads `0`;
+- `_Q40`, a thermal status change, sends one through `DYTC`: the emergency table, 4 or 14,
+  while EC field `TSL1` has any of the bits `0x77` set, and the current mode's table otherwise.
 
 The patched `amd_pmf` sees every run of `DSTT`, whatever calls it, and counts it in
 `stt_tables` ([`kernel.md`](kernel.md)). The service writes the target again after each table
-and after each event it can see ([`dbus.md`](dbus.md#events)).
+and after each event it can see ([`dbus.md`](dbus.md#events)). The emergency table's 6 W limits
+stay in force: the service writes only the skin target.
 
 Writing `0` to `stt_skin_temp_apu` puts back the latest table's target
 ([`kernel.md`](kernel.md)).

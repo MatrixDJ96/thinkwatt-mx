@@ -13,15 +13,16 @@ methods that read sysfs on demand (ReadFigures, ReadLimits, ReadMetrics). Every 
 is authorised by polkit, action io.github.matrixdj96.ThinkwattMX.set, checked against the
 caller's bus name; reads ask nothing.
 
-Both knobs are attributes of the patched drivers of docs/kernel.md, and nothing here touches the
-SMU by any other way. The target goes to amd_pmf's stt_skin_temp_apu, which sends it on the
-driver's own mailbox; 0 there puts the firmware's table back. Ceiling lives in this process:
-it dies with it and with the reboot, is refused under any profile but performance, is zeroed
-when the profile leaves performance, and is written again after every kernel event that may
-have pushed the firmware's table over it: a profile change, the lap mode flip, a power-source
-or battery uevent, and every table the patched amd_pmf counts in stt_tables, which sees the
-ones no event announces. Lap mode is cleared by writing 0 to dytc_lapmode; the EC keeps its own
-opinion, so the clear is a remedy re-issued on every event, and the target follows the flip.
+The target and lap mode are attributes of the patched drivers of docs/kernel.md, the GPU level
+amdgpu's own: nothing here reaches the SMU but through the kernel's drivers. The target goes to
+amd_pmf's stt_skin_temp_apu, which sends it on the driver's own mailbox; 0 there puts the firmware's
+table back. Ceiling lives in this process: it dies with it and with the reboot, is refused under any
+profile but performance, is zeroed when the profile leaves performance, and is written again after
+every kernel event that may have pushed the firmware's table over it: a profile change, the lap mode
+flip, a power-source or battery uevent, and every table the patched amd_pmf counts in stt_tables,
+which sees the ones no event announces. Lap mode is cleared by writing 0 to dytc_lapmode; the EC
+keeps its own opinion, so the clear is a remedy re-issued on every event, and the target follows the
+flip.
 
 The events come from inotify (Gio file monitors, no sysfs file held open: tuned-ppd takes the
 Fn key only when nobody has platform_profile open) and from the kernel uevent socket. A profile

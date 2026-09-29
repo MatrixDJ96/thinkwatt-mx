@@ -29,27 +29,30 @@ scripts/check.sh --self-test         # the linters and the width guard refuse ba
   facts (model, firmware, kernel, measurements): this overrides the user-level rule that routes
   machine facts to auto-memory.
 - Bash starts with `#!/usr/bin/env bash` and `set -euo pipefail`, Python with a module
-  docstring; lines stop at 100 columns.
+  docstring; Bash and Python lines stop at 100 columns.
 - Commands in `bin/` and `tools/` have no extension; other scripts keep theirs.
-- Everything in the tree is English, including every line a script prints. A refusal goes to
+- Everything in the tree is English, including every line a script prints, except the Italian
+  translations: `widget/po/it.po` and the `[it]` keys of `metadata.json`. A refusal goes to
   stderr as `FAIL:` and names the offending value.
 - Applet strings are English `i18n` sources. After a string change, run
-  `widget/build-locale.sh` and translate every new entry of `widget/po/it.po`, leaving no
-  `fuzzy` or `#~` entries.
+  `widget/build-locale.sh` and translate every new entry of `widget/po/it.po`, leaving `msgstr`
+  empty only where Italian keeps the English text, and no `fuzzy` or `#~` entries.
 - A design assumption that measurement disproved gets a row in `CHANGELOG.md`; open work goes
   to `ROADMAP.md`.
 - A guard or a test case exists only for a state a host reaches.
-- A script that guards something ships a `--self-test` that feeds it bad input and requires
-  the refusal.
+- A script that guards something ships a `--self-test` that feeds it bad input and requires the
+  refusal.
 
 ## Gotchas
 
-- Only `amd_pmf` talks to the SMU. A `ryzenadj` call concurrent with another SMU client, a
-  second `ryzenadj` or the firmware's AML on a power-source change, wedged the mailbox and took
-  the GPU down (`docs/smu.md`).
+- Only the kernel's drivers talk to the SMU: `amd_pmf` for the skin target and the limits,
+  `amdgpu` for the GPU level and readings. A `ryzenadj` call concurrent with another SMU
+  client, a second `ryzenadj` or the firmware's AML on a power-source change, wedged the
+  mailbox and took the GPU down (`docs/smu.md`).
 - Without the SELinux rule `scripts/install.sh` lays on
-  `/usr/local/libexec/thinkwatt-mx/kmods(/.*)?`, the kernel refuses the patched modules and the
-  service stops: nothing reports it.
+  `/usr/local/libexec/thinkwatt-mx/kmods(/.*)?`, the kernel refuses the patched modules:
+  `thinkwatt-mx-kmods` fails with `FAIL: <file> refused to load`, `thinkwatt-mx` does not
+  start, and no log line names the missing label.
 - `kmods/swap.sh` leaves a driver that is already the patched one loaded: restarting
   `thinkwatt-mx-kmods` after a change to `kmods/patches/` keeps the old module until a reboot.
 - Both fan curve gates fail with `No module named 'gi'` when the first `python3` on `PATH`

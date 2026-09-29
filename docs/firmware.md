@@ -37,7 +37,7 @@ share. Only two DSDT methods write it:
 | method | DYTC command     | effect on `VCQL`                                          |
 | ------ | ---------------- | --------------------------------------------------------- |
 | `DCSE` | `DYTC_CMD_SET`   | sets it from the argument, then sends a table with `DSTT` |
-| `DCRE` | `DYTC_CMD_RESET` | clears it                                                 |
+| `DCRE` | `DYTC_CMD_RESET` | clears it, then sends table 7 or 17 with `DSTT`           |
 
 No SMM code writes `VCQL` at runtime. Besides the DSDT, only one DXE driver stores to it:
 `TpAcpiNvsInitDxe`, at boot. The SMM handlers of `SmmAslSmi` write EC registers only. Lap mode
