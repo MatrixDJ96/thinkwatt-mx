@@ -167,9 +167,11 @@ write_applet_order() {
         --key AppletOrder "$2"
 }
 
+# The session runs the shell as plasma-plasmashell.service; started any other way it leaves the
+# unit, whose Restart=on-failure then no longer covers it. kquitapp6 quits it cleanly, which
+# that restart policy ignores, so a quit and a start are all a restart needs.
 start_plasmashell() {
-    setsid plasmashell > /dev/null 2>&1 < /dev/null &
-    disown
+    systemctl --user start plasma-plasmashell.service
 }
 
 applet_installed() {
