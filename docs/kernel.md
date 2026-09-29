@@ -74,7 +74,8 @@ driver that lacks what its patch adds to sysfs (for `amd_pmf`, `stt_tables`, the
 attribute), `swap.sh` unloads it (with `amdxdna`, which holds `amd_pmf`) and loads the patched
 copy with the options `modprobe` would pass, including `thinkpad_acpi.fan_control=1`. When
 `tuned-ppd` is already running, it also restores `platform_profile` from it, because both
-drivers start their profile handler on `balanced`.
+drivers start their profile handler on `balanced`. A patched copy that refuses to load gives
+its place back to the in-tree module, and the unit fails.
 
 What to run after a kernel update or a change to the patches is in
 [`install.md`](install.md#updating).

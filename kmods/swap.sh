@@ -6,7 +6,7 @@
 #   scripts/install.sh, it loads the installed kmods/<release>/ beside that bin/
 #
 # Exit status: 0 both patched modules are the ones loaded, 1 a copy is missing for this kernel
-# or a module refused to unload or load.
+# or a module refused to unload or load; a copy that refused leaves the in-tree module loaded.
 #
 # /lib/modules is read-only on Fedora Atomic, so the copies live outside it and
 # thinkwatt-mx-kmods.service loads them at boot, before the daemons and before TuneD. A module
@@ -49,6 +49,7 @@ is_ours() {
 }
 
 # Loads <file> under <module name>, replacing whatever is loaded unless it is already this copy.
+# A copy that refuses to load gives its place back to the in-tree module, and the call fails.
 swap() {
     local module=$1 file=$2 args=${3:-}
     if is_ours "$module"; then
@@ -62,7 +63,12 @@ swap() {
     fi
     # shellcheck disable=SC2086  # args is a list of name=value words
     if ! insmod "$file" $args; then
-        fail "$file refused to load"
+        if modprobe "$module"; then
+            printf 'FAIL: %s refused to load: the in-tree %s is back\n' "$file" "$module" >&2
+        else
+            printf 'FAIL: %s refused to load, and so did the in-tree %s\n' "$file" "$module" >&2
+        fi
+        return 1
     fi
     printf 'OK:   %s loaded from %s\n' "$module" "$file"
 }
@@ -99,14 +105,18 @@ if [ -d /sys/module/amdxdna ] && ! is_ours amd_pmf; then
     fi
     removed_xdna=yes
 fi
-swap amd_pmf "$DIR/amd-pmf.ko" "$(module_args amd_pmf)"
+swapped=yes
+swap amd_pmf "$DIR/amd-pmf.ko" "$(module_args amd_pmf)" || swapped=
 if [ -n "$removed_xdna" ]; then
     if ! modprobe amdxdna; then
         fail "amdxdna refused to load again"
     fi
 fi
+if [ -z "$swapped" ]; then
+    exit 1
+fi
 
-swap thinkpad_acpi "$DIR/thinkpad_acpi.ko" "$(module_args thinkpad_acpi)"
+swap thinkpad_acpi "$DIR/thinkpad_acpi.ko" "$(module_args thinkpad_acpi)" || exit 1
 
 # At boot the profile daemon is ordered after this unit, and asking the bus for it would wait
 # out the activation timeout, 25 s of boot for nothing: the aggregate is realigned only when the
