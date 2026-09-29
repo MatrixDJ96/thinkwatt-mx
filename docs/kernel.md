@@ -4,8 +4,8 @@ ThinkWatt MX patches two in-tree drivers. The service writes the skin target and
 through the sysfs attributes these patches add, so the skin target reaches the SMU through
 `amd_pmf`, the driver the firmware expects ([`smu.md`](smu.md)).
 
-- `kmods/patches/amd-pmf-stt-override.patch` adds three attributes to `amd_pmf`:
-  `stt_skin_temp_apu`, `power_limits` and `metrics`.
+- `kmods/patches/amd-pmf-stt-override.patch` adds four attributes to `amd_pmf`:
+  `stt_skin_temp_apu`, `power_limits`, `metrics` and `stt_tables`.
 - `kmods/patches/thinkpad_acpi-lapmode-store.patch` makes `dytc_lapmode` of `thinkpad_acpi`
   writable.
 
@@ -16,17 +16,25 @@ itself, with the mailbox command `SET_STT_LIMIT_APU`. This BIOS declares the OS 
 instead. There the driver only notifies the BIOS of profile and power-source changes, and the
 DSDT sends the table.
 
-The patch adds three attributes to `/sys/bus/platform/devices/AMDI0102:00/`:
+The patch adds four attributes to `/sys/bus/platform/devices/AMDI0102:00/`:
 
 | attribute           | access | content                                                                             |
 | ------------------- | ------ | ----------------------------------------------------------------------------------- |
 | `stt_skin_temp_apu` | rw     | skin target override in whole °C, `0` for none                                      |
 | `power_limits`      | ro     | `spl`, `fppt`, `sppt`, `sppt_apu_only`, `stt_min` in mW; `stt_apu`, `stt_hs2` in °C |
 | `metrics`           | ro     | skin, core, GPU and SoC temperatures; APU and socket power; STAPM limit             |
+| `stt_tables`        | ro     | BIOS STT tables sent since the driver loaded; each one notifies the file's readers  |
 
 A non-zero write to `stt_skin_temp_apu` is sent to the SMU at once. The driver sends it again
 after its own notification to the BIOS on every profile and power-source change, so the table
 the BIOS sends does not replace it. Values above 255 are refused.
+
+The BIOS also sends tables the driver does not cause: the EC query `_Q3E` calls `DSTT` and
+raises no event ([`envelope.md`](envelope.md#the-firmware-takes-the-target-back)). Two kprobes
+on the AML interpreter, on `acpi_ds_begin_method_execution` and
+`acpi_ds_terminate_control_method`, see each run of `\_SB.PCI0.LPC0.EC0.HKEY.DSTT` start and
+end. At the end the table is in the SMU: `stt_tables` counts one and notifies its readers, and
+inotify sees the change. The probes compare two pointers and touch no mailbox.
 
 Writing `0` restores the target in force before the override. On the static slider that is the
 slider's value. Otherwise, on the V1 interface, it is the value the driver read from the SMU at
@@ -61,10 +69,11 @@ given. It needs the kernel headers and the network:
 `modules_object_t`. Without that label the kernel refuses to load them.
 
 At boot `thinkwatt-mx-kmods.service` runs `swap.sh` before TuneD and the service. For each
-driver still in its stock version, `swap.sh` unloads it (with `amdxdna`, which holds `amd_pmf`)
-and loads the patched copy with the options `modprobe` would pass, including
-`thinkpad_acpi.fan_control=1`. When `tuned-ppd` is already running, it also restores
-`platform_profile` from it, because both drivers start their profile handler on `balanced`.
+driver that lacks what its patch adds to sysfs (for `amd_pmf`, `stt_tables`, the latest
+attribute), `swap.sh` unloads it (with `amdxdna`, which holds `amd_pmf`) and loads the patched
+copy with the options `modprobe` would pass, including `thinkpad_acpi.fan_control=1`. When
+`tuned-ppd` is already running, it also restores `platform_profile` from it, because both
+drivers start their profile handler on `balanced`.
 
 What to run after a kernel update or a change to the patches is in
 [`install.md`](install.md#updating).

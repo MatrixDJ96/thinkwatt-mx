@@ -61,10 +61,12 @@ No table allows more than 22 W of STAPM, so no BIOS option gives more.
 ## The firmware takes the target back
 
 The firmware sends a table again on several events: a profile change, a power-source change, a
-battery change and a lap mode change. The EC query `_Q3E` also calls `DSTT` at times that are
-not known ([`../ROADMAP.md`](../ROADMAP.md)).
+battery change and a lap mode change. The EC query `_Q3E` also calls `DSTT` when EC register
+`MAXP` reads `0`, at times that are not known ([`../ROADMAP.md`](../ROADMAP.md)), and raises no
+event.
 
-The service writes the target again after each event it can see ([`dbus.md`](dbus.md#events)).
-A table sent by `_Q3E` stays in force until the next such event.
+The patched `amd_pmf` sees every run of `DSTT`, whatever calls it, and counts it in
+`stt_tables` ([`kernel.md`](kernel.md)). The service writes the target again after each table
+and after each event it can see ([`dbus.md`](dbus.md#events)).
 
 Writing `0` to `stt_skin_temp_apu` restores the value the SMU held before the first write.

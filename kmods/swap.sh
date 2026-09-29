@@ -35,12 +35,13 @@ fail() {
     exit 1
 }
 
-# Whether the loaded module is our copy: each patch adds one thing to sysfs the in-tree module
-# has not. amd_pmf carries no srcversion to compare, thinkpad_acpi's would do but one rule is
-# simpler than two.
+# Whether the loaded module is our current copy: each patch adds one thing to sysfs the in-tree
+# module has not, for amd_pmf the latest thing, which an older copy of ours has not either.
+# amd_pmf carries no srcversion to compare, thinkpad_acpi's would do but one rule is simpler
+# than two.
 is_ours() {
     case "$1" in
-        amd_pmf) [ -e /sys/bus/platform/devices/AMDI0102:00/stt_skin_temp_apu ] ;;
+        amd_pmf) [ -e /sys/bus/platform/devices/AMDI0102:00/stt_tables ] ;;
         thinkpad_acpi)
             [ "$(stat -c %a /sys/devices/platform/thinkpad_acpi/dytc_lapmode 2> /dev/null)" = 644 ]
             ;;

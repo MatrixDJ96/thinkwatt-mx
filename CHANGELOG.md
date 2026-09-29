@@ -8,6 +8,7 @@ the design, so the same mistake is not made twice.
 | assumption                                                 | finding                                                                                                  |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | a written skin target stays in force                       | the firmware sends its table again and the target falls back to 37 °C; the service rewrites it on events |
+| the service's events announce every firmware table         | a table came with no event and the target stayed at 37 °C; `amd_pmf` now counts every `DSTT`             |
 | `amd_pmf` sends the limits on this machine                 | this BIOS uses the OS power slider: `amd_pmf` only notifies, the DSDT sends the table                    |
 | after a release the firmware restores its target by itself | at rest it did not for ten minutes; the patched driver restores it when `0` is written                   |
 | reading the SMU with `ryzenadj` on a timer is safe         | three concurrent callers hung the SMU and the GPU ([`docs/smu.md`](docs/smu.md))                         |

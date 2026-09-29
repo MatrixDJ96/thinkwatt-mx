@@ -79,10 +79,13 @@ applet's service button works.
 | `dytc_lapmode` changes     | inotify                | on `1`, write `0`; on `0`, write the target again        |
 | `platform_profile` changes | inotify, 500 ms settle | update `Profile`; outside `performance`, close `Ceiling` |
 | `AC` or `BAT0` uevent      | netlink uevent socket  | write the target again                                   |
+| `stt_tables` changes       | inotify                | log `firmware table <n>`, write the target again         |
 
 The firmware may overwrite the target on any of these events, so the service writes it again
-after each one while `Ceiling` is set. It does not write it while lap mode reads `1`; the
-change back to `0` comes after the firmware's own write ([`lapmode.md`](lapmode.md)).
+after each one while `Ceiling` is set. `stt_tables` counts the tables themselves, including the
+ones no other event announces ([`kernel.md`](kernel.md)). The service does not write the target
+while lap mode reads `1`; the change back to `0` comes after the firmware's own write
+([`lapmode.md`](lapmode.md)).
 
 The service never keeps a sysfs file open, and it reads `platform_profile` only after 500 ms
 without notifications. `tuned-ppd` decides whether a profile change came from the Fn key by

@@ -19,7 +19,8 @@ driver's own mailbox; 0 there puts the firmware's table back. Ceiling lives in t
 it dies with it and with the reboot, is refused under any profile but performance, is zeroed
 when the profile leaves performance, and is written again after every kernel event that may
 have pushed the firmware's table over it: a profile change, the lap mode flip, a power-source
-or battery uevent. Lap mode is cleared by writing 0 to dytc_lapmode; the EC keeps its own
+or battery uevent, and every table the patched amd_pmf counts in stt_tables, which sees the
+ones no event announces. Lap mode is cleared by writing 0 to dytc_lapmode; the EC keeps its own
 opinion, so the clear is a remedy re-issued on every event, and the target follows the flip.
 
 The events come from inotify (Gio file monitors, no sysfs file held open: tuned-ppd takes the
@@ -35,7 +36,7 @@ loop writes: `curve` the curve, a fixed level that level, overridden by full spe
 until Tctl is back under 85 C, `auto` hands the fan to the EC and the loop idles. This is the
 only writer of /proc/acpi/ibm/fan.
 
-The two inotify watches are on the attributes' inodes: a driver swapped by hand while the
+The three inotify watches are on the attributes' inodes: a driver swapped by hand while the
 service runs takes its events with it, and `systemctl restart thinkwatt-mx` re-arms them.
 """
 
@@ -85,6 +86,7 @@ MODEL = "/sys/class/dmi/id/product_family"
 PLATFORM_PROFILE = "/sys/firmware/acpi/platform_profile"
 PMF = "/sys/bus/platform/devices/AMDI0102:00"
 SKIN_TARGET = f"{PMF}/stt_skin_temp_apu"
+STT_TABLES = f"{PMF}/stt_tables"
 CPUFREQ = "/sys/devices/system/cpu/cpu*/cpufreq"
 CPU0 = "/sys/devices/system/cpu/cpu0/cpufreq"
 DRM = "/sys/class/drm/card*/device"
@@ -224,6 +226,7 @@ class Service:
         self.fan_level = "curve"
         self.profile = read_attribute(PLATFORM_PROFILE)
         self.lapmode = False
+        self.stt_tables = read_attribute(STT_TABLES)
         self.profile_timer = None
         self.level = None
         self.samples = []
@@ -233,7 +236,8 @@ class Service:
         self.amdgpu = hwmon_path("amdgpu")
         self.drm = os.path.dirname(glob.glob(f"{DRM}/gpu_busy_percent")[0])
         self.monitors = []
-        for path, handler in ((LAPMODE, self.on_lapmode), (PLATFORM_PROFILE, self.on_profile)):
+        for path, handler in ((LAPMODE, self.on_lapmode), (PLATFORM_PROFILE, self.on_profile),
+                              (STT_TABLES, self.on_stt_tables)):
             monitor = Gio.File.new_for_path(path).monitor_file(Gio.FileMonitorFlags.NONE, None)
             monitor.connect("changed", handler)
             self.monitors.append(monitor)
@@ -335,6 +339,16 @@ class Service:
         self.announce(changed)
         self.push_ceiling()
         return False
+
+    # The firmware sent an STT table, maybe from an EC query that raises no event (_Q3E). Each
+    # notification raises several inotify events: only a new count is acted on.
+    def on_stt_tables(self, *_):
+        tables = read_attribute(STT_TABLES)
+        if tables == self.stt_tables:
+            return
+        self.stt_tables = tables
+        log(f"firmware table {tables}")
+        self.push_ceiling()
 
     # A callback that raises is removed by GLib for good: every read here is guarded.
     def on_uevent(self, *_):

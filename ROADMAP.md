@@ -2,9 +2,10 @@
 
 ## Firmware
 
-- **When `_Q3E` fires.** This EC query sends a firmware table and can lower the skin target
-  without any event the service sees. The target then stays low until the next event
-  ([`docs/envelope.md`](docs/envelope.md)).
+- **When `_Q3E` fires.** This EC query sends a firmware table when EC register `MAXP` reads
+  `0`; what the register holds is unknown. The service writes the target back after each table.
+  A `firmware table` log line with no event beside it gives the time of a table no event
+  announces, `_Q3E`'s or another path's ([`docs/envelope.md`](docs/envelope.md)).
 - **Lid and suspend.** Neither path sends a table in the DSDT. Whether the target survives a
   resume has not been checked.
 - **The EC's lap mode criterion.** Reading EC register `0xC4` when lap mode appears needs a

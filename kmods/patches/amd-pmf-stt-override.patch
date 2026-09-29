@@ -11,7 +11,23 @@ SPDX-License-Identifier: GPL-2.0-only
  	return NOTIFY_OK;
  }
  
-@@ -652,6 +654,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
+@@ -628,6 +630,7 @@ static int amd_pmf_probe(struct platform_device *pdev)
+ 	platform_set_drvdata(pdev, dev);
+ 	amd_pmf_dbgfs_register(dev);
+ 	amd_pmf_init_features(dev);
++	amd_pmf_init_stt_tables(dev);
+ 	apmf_install_handler(dev);
+ 	if (is_apmf_func_supported(dev, APMF_FUNC_SBIOS_HEARTBEAT_V2))
+ 		amd_pmf_notify_sbios_heartbeat_event_v2(dev, ON_LOAD);
+@@ -643,6 +646,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
+ {
+ 	struct amd_pmf_dev *dev = platform_get_drvdata(pdev);
+ 
++	amd_pmf_deinit_stt_tables(dev);
+ 	amd_pmf_deinit_features(dev);
+ 	if (is_apmf_func_supported(dev, APMF_FUNC_SBIOS_HEARTBEAT_V2))
+ 		amd_pmf_notify_sbios_heartbeat_event_v2(dev, ON_UNLOAD);
+@@ -652,6 +656,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
  
  static const struct attribute_group *amd_pmf_driver_groups[] = {
  	&cnqf_feature_attribute_group,
@@ -21,21 +37,37 @@ SPDX-License-Identifier: GPL-2.0-only
  
 --- a/drivers/platform/x86/amd/pmf/pmf.h
 +++ b/drivers/platform/x86/amd/pmf/pmf.h
-@@ -401,6 +401,8 @@ struct amd_pmf_dev {
+@@ -15,6 +15,7 @@
+ #include <linux/amd-pmf-io.h>
+ #include <linux/circ_buf.h>
+ #include <linux/input.h>
++#include <linux/kprobes.h>
+ #include <linux/mutex_types.h>
+ #include <linux/platform_device.h>
+ #include <linux/platform_profile.h>
+@@ -401,6 +402,14 @@ struct amd_pmf_dev {
  	struct mutex lock; /* protects the PMF interface */
  	u32 supported_func;
  	enum platform_profile_option current_profile;
 +	u32 stt_apu_override; /* skin-temperature target in degrees C, 0 for the BIOS table */
 +	u32 stt_apu_table; /* the target the SMU held before the override, Q8.8, 0 if unread */
++	acpi_handle stt_dstt; /* the DSDT method that sends a BIOS STT table, NULL if unwatched */
++	void *stt_dstt_desc; /* its method object, learnt when it first runs */
++	struct kprobe stt_begin_probe;
++	struct kprobe stt_end_probe;
++	struct work_struct stt_table_work;
++	u32 stt_tables; /* BIOS STT tables sent since load */
  	struct device *ppdev; /* platform profile class device */
  	struct dentry *dbgfs_dir;
  	int hb_interval; /* SBIOS heartbeat interval */
-@@ -912,6 +914,8 @@ int amd_pmf_init_cnqf(struct amd_pmf_dev *dev);
+@@ -912,6 +921,10 @@ int amd_pmf_init_cnqf(struct amd_pmf_dev *dev);
  void amd_pmf_deinit_cnqf(struct amd_pmf_dev *dev);
  int amd_pmf_trans_cnqf(struct amd_pmf_dev *dev, int socket_power, ktime_t time_lapsed_ms);
  extern const struct attribute_group cnqf_feature_attribute_group;
 +extern const struct attribute_group sps_override_attribute_group;
 +void amd_pmf_apply_stt_override(struct amd_pmf_dev *pmf);
++void amd_pmf_init_stt_tables(struct amd_pmf_dev *pmf);
++void amd_pmf_deinit_stt_tables(struct amd_pmf_dev *pmf);
  
  /* Smart PC builder Layer */
  int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev);
@@ -61,7 +93,7 @@ SPDX-License-Identifier: GPL-2.0-only
  				 NULL);
  		amd_pmf_send_cmd(dev, SET_STT_LIMIT_HS2, SET_CMD,
  				 fixp_q88_fromint(config_store.prop[src][idx].stt_skin_temp[STT_TEMP_HS2]),
-@@ -286,6 +288,169 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
+@@ -286,6 +288,248 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
  	return pmf->current_profile == PLATFORM_PROFILE_BALANCED;
  }
  
@@ -200,6 +232,84 @@ SPDX-License-Identifier: GPL-2.0-only
 +}
 +static DEVICE_ATTR_RO(metrics);
 +
++/* The DSDT method that sends one BIOS STT table to the SMU through ALIB. */
++#define STT_TABLE_METHOD "\\_SB.PCI0.LPC0.EC0.HKEY.DSTT"
++
++/* DSTT's method object is its node's own: the end of a run is its pointer. */
++static int amd_pmf_stt_begin(struct kprobe *p, struct pt_regs *regs)
++{
++	struct amd_pmf_dev *pmf = container_of(p, struct amd_pmf_dev, stt_begin_probe);
++
++	if ((acpi_handle)regs_get_kernel_argument(regs, 0) == pmf->stt_dstt)
++		WRITE_ONCE(pmf->stt_dstt_desc, (void *)regs_get_kernel_argument(regs, 1));
++	return 0;
++}
++
++static int amd_pmf_stt_end(struct kprobe *p, struct pt_regs *regs)
++{
++	struct amd_pmf_dev *pmf = container_of(p, struct amd_pmf_dev, stt_end_probe);
++	void *desc = READ_ONCE(pmf->stt_dstt_desc);
++
++	if (desc && (void *)regs_get_kernel_argument(regs, 0) == desc) {
++		WRITE_ONCE(pmf->stt_tables, pmf->stt_tables + 1);
++		schedule_work(&pmf->stt_table_work);
++	}
++	return 0;
++}
++
++/* sysfs_notify sleeps, and the probes run in the interpreter with preemption off. */
++static void amd_pmf_stt_table_notify(struct work_struct *work)
++{
++	struct amd_pmf_dev *pmf = container_of(work, struct amd_pmf_dev, stt_table_work);
++
++	sysfs_notify(&pmf->dev->kobj, NULL, "stt_tables");
++}
++
++/*
++ * _Q3E, _Q40, _Q4B and DYTC send the BIOS STT tables through DSTT, and no
++ * Notify marks one. Two probes on the AML interpreter see each run of DSTT
++ * begin and end; at the end, with the table in the SMU, stt_tables counts one
++ * and notifies its readers.
++ */
++void amd_pmf_init_stt_tables(struct amd_pmf_dev *pmf)
++{
++	struct kprobe *probes[] = { &pmf->stt_begin_probe, &pmf->stt_end_probe };
++	int err;
++
++	if (ACPI_FAILURE(acpi_get_handle(NULL, STT_TABLE_METHOD, &pmf->stt_dstt)))
++		return;
++	INIT_WORK(&pmf->stt_table_work, amd_pmf_stt_table_notify);
++	pmf->stt_begin_probe.symbol_name = "acpi_ds_begin_method_execution";
++	pmf->stt_begin_probe.pre_handler = amd_pmf_stt_begin;
++	pmf->stt_end_probe.symbol_name = "acpi_ds_terminate_control_method";
++	pmf->stt_end_probe.pre_handler = amd_pmf_stt_end;
++	err = register_kprobes(probes, ARRAY_SIZE(probes));
++	if (err) {
++		dev_warn(pmf->dev, "STT tables unwatched: kprobe error %d\n", err);
++		pmf->stt_dstt = NULL;
++	}
++}
++
++void amd_pmf_deinit_stt_tables(struct amd_pmf_dev *pmf)
++{
++	struct kprobe *probes[] = { &pmf->stt_begin_probe, &pmf->stt_end_probe };
++
++	if (!pmf->stt_dstt)
++		return;
++	unregister_kprobes(probes, ARRAY_SIZE(probes));
++	cancel_work_sync(&pmf->stt_table_work);
++}
++
++/* The BIOS STT tables sent since the driver loaded; each one is notified. */
++static ssize_t stt_tables_show(struct device *dev,
++			       struct device_attribute *attr, char *buf)
++{
++	struct amd_pmf_dev *pdev = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%u\n", READ_ONCE(pdev->stt_tables));
++}
++static DEVICE_ATTR_RO(stt_tables);
++
 +static umode_t sps_override_is_visible(struct kobject *kobj,
 +				       struct attribute *attr, int n)
 +{
@@ -220,6 +330,7 @@ SPDX-License-Identifier: GPL-2.0-only
 +	&dev_attr_stt_skin_temp_apu.attr,
 +	&dev_attr_power_limits.attr,
 +	&dev_attr_metrics.attr,
++	&dev_attr_stt_tables.attr,
 +	NULL
 +};
 +
@@ -231,7 +342,7 @@ SPDX-License-Identifier: GPL-2.0-only
  static int amd_pmf_profile_get(struct device *dev,
  			       enum platform_profile_option *profile)
  {
-@@ -390,6 +555,8 @@ static int amd_pmf_profile_set(struct device *dev,
+@@ -390,6 +634,8 @@ static int amd_pmf_profile_set(struct device *dev,
  			return ret;
  	}
  
