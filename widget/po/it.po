@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: plasma_applet_io.github.matrixdj96.thinkwattmx\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-30 02:24+0200\n"
+"POT-Creation-Date: 2026-10-02 23:20+0200\n"
 "PO-Revision-Date: 2026-09-19 23:00+0200\n"
 "Last-Translator: Mattia Rombi\n"
 "Language-Team: Italian\n"
@@ -197,20 +197,17 @@ msgstr "Nuova versione disponibile"
 msgid "Service out of date"
 msgstr "Servizio non aggiornato"
 
+msgid "Update needed"
+msgstr "Aggiornamento necessario"
+
 msgid "%1 · %2 threads"
 msgstr "%1 · %2 thread"
-
-msgid "service stopped"
-msgstr "servizio fermo"
 
 msgid "Updating…"
 msgstr "Aggiornamento in corso…"
 
 msgid "Update failed"
 msgstr "Aggiornamento non riuscito"
-
-msgid "No drivers for this kernel"
-msgstr "Nessun driver per questo kernel"
 
 msgid "Retry"
 msgstr "Riprova"
@@ -220,9 +217,6 @@ msgstr "Riavvia"
 
 msgid "Update"
 msgstr "Aggiorna"
-
-msgid "Build drivers"
-msgstr "Compila i driver"
 
 msgid "GHz"
 msgstr ""

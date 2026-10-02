@@ -44,9 +44,10 @@ the design, so the same mistake is not made twice.
 
 ## Applet
 
-| assumption                                          | finding                                                                                                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| the applet can live in the system tray              | the tray gives it a square cell whatever width it asks for                                                   |
-| the QML D-Bus map can write `ActiveProfile`         | `tuned-ppd`'s introspection lists no properties and `plasmashell` crashes; the applet calls `Properties.Set` |
-| an id named `state` is visible inside the selectors | every `Item` has a `state` property, which shadows it                                                        |
-| scrolling over the popup is harmless                | Plasma's `ComboBox` steps on every wheel event; the selectors ignore the wheel                               |
+| assumption                                             | finding                                                                                                      |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| the applet can live in the system tray                 | the tray gives it a square cell whatever width it asks for                                                   |
+| the QML D-Bus map can write `ActiveProfile`            | `tuned-ppd`'s introspection lists no properties and `plasmashell` crashes; the applet calls `Properties.Set` |
+| an id named `state` is visible inside the selectors    | every `Item` has a `state` property, which shadows it                                                        |
+| scrolling over the popup is harmless                   | Plasma's `ComboBox` steps on every wheel event; the selectors ignore the wheel                               |
+| a binding on the D-Bus map wakes on every key it names | a key skipped by `&&` while the map was empty never wakes it; the binding reads every key first              |

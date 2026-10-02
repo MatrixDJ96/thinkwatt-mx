@@ -103,4 +103,4 @@ journalctl -u thinkwatt-mx -b
 | `is the bus policy installed?`                        | run `scripts/install.sh` again                  |
 
 If `systemctl status thinkwatt-mx` shows the unit as skipped, there are no drivers for the
-running kernel: build and install them.
+running kernel: the applet says so, and its button builds them ([Updating](#updating)).

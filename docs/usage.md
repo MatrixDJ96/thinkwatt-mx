@@ -23,7 +23,9 @@ fan levels other than `auto` are greyed out, the CPU and GPU selectors are disab
 firmware's own limits apply.
 
 When a new release is out, or the running kernel has no drivers, a line at the top of the popup
-says so and its button updates the machine ([`install.md`](install.md#updating)).
+says so and its button updates the machine ([`install.md`](install.md#updating)). Missing
+drivers also put a warning icon in the panel and disable the **Service** button until the
+update.
 
 The Fn key still changes the profile. Leaving `performance` closes `performance+`.
 

@@ -31,11 +31,14 @@ PlasmoidItem {
     readonly property string unit: "thinkwatt-mx.service"
     readonly property string updateUnit: "thinkwatt-mx-update.service"
     readonly property string kmods: "thinkwatt-mx-kmods.service"
-    // A condition checked and failed is a missing driver; a unit not yet run since boot has
-    // checked nothing.
     readonly property bool offered: latest !== "" && newer(latest, Plasmoid.metaData.version)
-    readonly property bool driversMissing: plain(kmodsUnit.properties.ConditionResult) === false
-        && Number(plain(kmodsUnit.properties.ConditionTimestamp)) > 0
+    // A condition checked and failed is a missing driver; a unit not yet run since boot has
+    // checked nothing. Both keys are read on every pass: one skipped while the map was still
+    // empty never wakes this binding when it arrives.
+    readonly property bool driversMissing: {
+        var checked = Number(plain(kmodsUnit.properties.ConditionTimestamp)) > 0;
+        return plain(kmodsUnit.properties.ConditionResult) === false && checked;
+    }
     readonly property bool updating: plain(updateState.properties.ActiveState) === "activating"
     readonly property bool updateFailed: plain(updateState.properties.ActiveState) === "failed"
     // A service older than 1.1.0 has no Version and reads as the missing mark.
@@ -359,6 +362,8 @@ PlasmoidItem {
         watchedService: root.service
 
         onRegisteredChanged: {
+            // The updater starts the service once it has built the missing drivers.
+            kmodsUnit.updateAll();
             if (registered) {
                 knobs.updateAll();
                 if (root.restore) {
@@ -529,7 +534,8 @@ PlasmoidItem {
     Plasmoid.status: clamped ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
     toolTipMainText: i18n("ThinkWatt MX")
     toolTipSubText: clamped ? i18n("Lap mode active: the ceiling is halved")
-        : offered ? i18n("New version available") : stale ? i18n("Service out of date") : ""
+        : offered ? i18n("New version available") : stale ? i18n("Service out of date")
+        : driversMissing ? i18n("Update needed") : ""
 
     compactRepresentation: MouseArea {
         // In a panel the applet is sized from these; the system tray ignores them and hands out a
@@ -557,9 +563,11 @@ PlasmoidItem {
             Kirigami.Icon {
                 id: badge
 
-                visible: root.clamped || root.stale || root.offered
-                source: root.clamped ? "dialog-warning" : "update-low"
-                implicitWidth: root.clamped ? Kirigami.Units.iconSizes.small
+                readonly property bool warning: root.clamped || root.driversMissing
+
+                visible: warning || root.stale || root.offered
+                source: warning ? "dialog-warning" : "update-low"
+                implicitWidth: warning ? Kirigami.Units.iconSizes.small
                     : Kirigami.Units.iconSizes.smallMedium
                 implicitHeight: implicitWidth
             }
@@ -610,7 +618,7 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Label {
-                        text: root.answered ? i18n("%1 · %2 threads", root.reading("model"), root.reading("cores")) : i18n("service stopped")
+                        text: root.answered ? i18n("%1 · %2 threads", root.reading("model"), root.reading("cores")) : root.missing
                         opacity: root.dimmed
                         font: Kirigami.Theme.smallFont
                     }
@@ -635,38 +643,67 @@ PlasmoidItem {
                 spacing: Kirigami.Units.largeSpacing
 
                 // A new release is offered before a stale service or missing drivers: its install
-                // restarts the one and builds the other.
-                Kirigami.InlineMessage {
+                // restarts the one and builds the other. Kirigami's InlineMessage moves its button
+                // under the text once the text wraps; this box keeps icon, text and button in a row.
+                Rectangle {
                     id: notice
 
                     readonly property bool restarts: root.stale && !root.updateFailed
                         && !root.offered
+                    readonly property bool warning: root.driversMissing && !root.offered
+                        && !root.updating
+                    readonly property color tone: root.updateFailed
+                        ? Kirigami.Theme.negativeTextColor
+                        : warning ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.activeTextColor
 
                     Layout.fillWidth: true
+                    implicitHeight: noticeRow.implicitHeight + Kirigami.Units.largeSpacing * 2
                     visible: root.updating || root.updateFailed || root.offered || root.stale
                         || root.driversMissing
-                    type: root.updateFailed ? Kirigami.MessageType.Error
-                        : root.driversMissing && !root.offered ? Kirigami.MessageType.Warning
-                        : Kirigami.MessageType.Information
-                    icon.name: type === Kirigami.MessageType.Information ? "update-low" : ""
-                    text: root.updating ? i18n("Updating…")
-                        : root.updateFailed ? i18n("Update failed")
-                        : root.offered ? i18n("New version available")
-                        : root.stale ? i18n("Service out of date")
-                        : i18n("No drivers for this kernel")
-                    actions: [
-                        Kirigami.Action {
+                    radius: Kirigami.Units.cornerRadius
+                    color: Qt.rgba(tone.r, tone.g, tone.b, 0.2)
+                    border.color: tone
+
+                    RowLayout {
+                        id: noticeRow
+
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.largeSpacing
+
+                        Kirigami.Icon {
+                            source: root.updateFailed ? "dialog-error"
+                                : notice.warning ? "dialog-warning" : "update-low"
+                            implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                            implicitHeight: implicitWidth
+                        }
+
+                        PlasmaComponents.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: root.updating ? i18n("Updating…")
+                                : root.updateFailed ? i18n("Update failed")
+                                : root.offered ? i18n("New version available")
+                                : root.stale ? i18n("Service out of date")
+                                : i18n("Update needed")
+                        }
+
+                        PlasmaComponents.Button {
                             visible: !root.updating
-                            tooltip: root.updateFailed ? "journalctl -u thinkwatt-mx-update"
-                                : root.offered ? root.latest : ""
                             icon.name: root.updateFailed || notice.restarts ? "view-refresh"
                                 : "system-software-update"
                             text: root.updateFailed ? i18n("Retry")
                                 : notice.restarts ? i18n("Restart")
-                                : root.offered ? i18n("Update") : i18n("Build drivers")
-                            onTriggered: notice.restarts ? root.restart() : root.startUpdate()
+                                : i18n("Update")
+                            onClicked: notice.restarts ? root.restart() : root.startUpdate()
+
+                            PlasmaComponents.ToolTip.text: root.updateFailed
+                                ? "journalctl -u thinkwatt-mx-update" : root.offered ? root.latest : ""
+                            PlasmaComponents.ToolTip.visible: hovered
+                                && PlasmaComponents.ToolTip.text !== ""
+                            PlasmaComponents.ToolTip.delay: Kirigami.Units.toolTipDelay
                         }
-                    ]
+                    }
                 }
 
                 RowLayout {
@@ -718,8 +755,10 @@ PlasmoidItem {
 
                     // Off releases the target and hands the fan to the EC; the button follows the
                     // name on the bus, so it reads what systemd did and not what was asked.
+                    // Without drivers systemd skips the start in silence: the update comes first.
                     PlasmaComponents.ToolButton {
                         Layout.alignment: Qt.AlignVCenter
+                        enabled: !root.driversMissing
                         checkable: true
                         checked: watcher.registered
                         icon.name: "system-run"
