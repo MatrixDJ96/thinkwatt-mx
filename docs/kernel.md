@@ -72,10 +72,12 @@ given. It needs the kernel headers and the network:
 At boot `thinkwatt-mx-kmods.service` runs `swap.sh` before TuneD and the service. For each
 driver whose loaded `srcversion` differs from the installed copy's, `swap.sh` unloads it (with
 `amdxdna`, which holds `amd_pmf`) and loads the patched copy with the options `modprobe` would
-pass, including `thinkpad_acpi.fan_control=1`. When `tuned-ppd` is already running, it also
-restores `platform_profile` from it, because both drivers start their profile handler on
-`balanced`. A patched copy that refuses to load gives its place back to the in-tree module, and
-the unit fails.
+pass, including `thinkpad_acpi.fan_control=1`. Both drivers start their profile handler on
+`balanced`, which `tuned-ppd` would take for the Fn key: when the unit runs again with
+`tuned-ppd` up, after an update or the applet's restart, `swap.sh` switches it to `balanced`
+before the reload and back afterwards, each time waiting for TuneD to apply the profile. A
+patched copy that refuses to load gives its place back to the in-tree module, and the unit
+fails.
 
 `srcversion` is a hash of the sources a module was built from: every build of the same sources
 gives the same one, and a changed patch gives another. The `amd_pmf` patch adds

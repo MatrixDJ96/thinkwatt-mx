@@ -28,19 +28,22 @@ the design, so the same mistake is not made twice.
 
 ## Service
 
-| assumption                                                                  | finding                                                                                          |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| writing `platform_profile` changes the profile                              | `tuned-ppd` does not follow it; the applet writes `net.hadess.PowerProfiles`                     |
-| holding the profile against the Fn key is a feature                         | `tuned-ppd` treats the Fn key as authority and drops every program's hold                        |
-| the service can keep `platform_profile` open                                | `tuned-ppd` then ignores the Fn key; the service watches with inotify and keeps nothing open     |
-| reading `platform_profile` on each notification is safe                     | a read during `tuned-ppd`'s own write makes it restore the old profile; the service waits 500 ms |
-| GLib's file monitor sends one event per change                              | it adds a `CHANGES_DONE_HINT` 2 s later; only `CHANGED` counts                                   |
-| a lap mode change is one notification                                       | it is a burst, including the service's own write; the service acts on a change of value only     |
-| fan hysteresis applies in both directions                                   | it held the fan still at 85 °C; the fan now rises at once and waits only when falling            |
-| a falling fan goes to the curve's level                                     | it chattered between bands; it now falls to the level the curve gives 2 °C higher                |
-| `thinkpad_acpi` keeps `fan_control=1` across a reload                       | `insmod` takes only its own arguments; `swap.sh` passes the options `modprobe -c` lists          |
-| units can run code from the clone                                           | the user can write the clone; the service and drivers are copied where only root writes          |
-| `kquitapp6` + `setsid plasmashell` restores the shell as the session ran it | it left the shell outside `plasma-plasmashell.service`, where a crash is not restarted           |
+| assumption                                                                  | finding                                                                                                 |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| writing `platform_profile` changes the profile                              | `tuned-ppd` does not follow it; the applet writes `net.hadess.PowerProfiles`                            |
+| holding the profile against the Fn key is a feature                         | `tuned-ppd` treats the Fn key as authority and drops every program's hold                               |
+| the service can keep `platform_profile` open                                | `tuned-ppd` then ignores the Fn key; the service watches with inotify and keeps nothing open            |
+| reading `platform_profile` on each notification is safe                     | a read during `tuned-ppd`'s own write makes it restore the old profile; the service waits 500 ms        |
+| a driver reload is undone by rewriting `platform_profile` afterwards        | `tuned-ppd` takes the drivers' `balanced` for the Fn key and writes last; the reload runs on `balanced` |
+| stopping `tuned-ppd` keeps it out of a driver reload                        | it is D-Bus activated and KDE starts it again at once                                                   |
+| a `Set` on `net.hadess.PowerProfiles` returns once TuneD applied it         | it returns 0.3 to 0.6 s earlier; `swap.sh` waits for TuneD's `profile_changed`                          |
+| GLib's file monitor sends one event per change                              | it adds a `CHANGES_DONE_HINT` 2 s later; only `CHANGED` counts                                          |
+| a lap mode change is one notification                                       | it is a burst, including the service's own write; the service acts on a change of value only            |
+| fan hysteresis applies in both directions                                   | it held the fan still at 85 °C; the fan now rises at once and waits only when falling                   |
+| a falling fan goes to the curve's level                                     | it chattered between bands; it now falls to the level the curve gives 2 °C higher                       |
+| `thinkpad_acpi` keeps `fan_control=1` across a reload                       | `insmod` takes only its own arguments; `swap.sh` passes the options `modprobe -c` lists                 |
+| units can run code from the clone                                           | the user can write the clone; the service and drivers are copied where only root writes                 |
+| `kquitapp6` + `setsid plasmashell` restores the shell as the session ran it | it left the shell outside `plasma-plasmashell.service`, where a crash is not restarted                  |
 
 ## Applet
 

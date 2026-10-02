@@ -13,10 +13,7 @@
 # already loaded from this copy, by srcversion, is left alone; any other is unloaded first,
 # amdxdna with it because it holds amd_pmf. insmod takes a module's arguments from its own
 # command line alone, so the options modprobe would collect, from the kernel command line and
-# from modprobe.d, are passed by hand: that is how thinkpad_acpi keeps fan_control=1. Both
-# drivers register a platform_profile handler at init and start it on balanced, so when the
-# profile daemon is already up the aggregate is rewritten from its ActiveProfile; at boot the
-# daemon starts after this unit and applies its own.
+# from modprobe.d, are passed by hand: that is how thinkpad_acpi keeps fan_control=1.
 
 set -euo pipefail
 
@@ -26,7 +23,6 @@ RELEASE=$(uname -r)
 readonly RELEASE
 DIR=$(dirname "$HERE")/kmods/$RELEASE
 readonly DIR
-readonly PROFILE=/sys/firmware/acpi/platform_profile
 readonly PPD=net.hadess.PowerProfiles
 readonly PPD_PATH=/net/hadess/PowerProfiles
 
@@ -77,16 +73,19 @@ module_args() {
     }'
 }
 
-# The profile daemon's name for the profile, in the kernel's vocabulary.
-active_profile() {
-    local wanted
-    wanted=$(busctl get-property "$PPD" "$PPD_PATH" "$PPD" ActiveProfile 2> /dev/null \
-        | tr -d '"' | awk '{ print $2 }' || true)
-    case "$wanted" in
-        power-saver) printf 'low-power' ;;
-        balanced | performance) printf '%s' "$wanted" ;;
-        *) return 1 ;;
-    esac
+# Sets the profile daemon's profile and returns once TuneD has applied it, 30 s at most. The
+# listener gets half a second to subscribe before the request, or the signal could come first.
+# A profile left wrong is reported and does not stop the drivers.
+switch_profile() {
+    timeout 30 busctl wait --quiet com.redhat.tuned /Tuned com.redhat.tuned.control \
+        profile_changed &
+    local waiter=$!
+    sleep 0.5
+    busctl set-property "$PPD" "$PPD_PATH" "$PPD" ActiveProfile s "$1" \
+        || printf 'FAIL: the profile daemon refused %s\n' "$1" >&2
+    if ! wait "$waiter"; then
+        printf 'FAIL: TuneD did not apply %s within 30 s\n' "$1" >&2
+    fi
 }
 
 for file in "$DIR/amd-pmf.ko" "$DIR/thinkpad_acpi.ko"; do
@@ -94,6 +93,22 @@ for file in "$DIR/amd-pmf.ko" "$DIR/thinkpad_acpi.ko"; do
         fail "$file is missing: run kmods/build.sh, then scripts/install.sh"
     fi
 done
+
+# Both drivers start their platform_profile handler on balanced. Reloaded under another profile,
+# the daemon takes that for the Fn key and its own switch lands last, so the reload runs on
+# balanced and the profile in force comes back through the daemon, on success or refusal. At
+# boot the daemon starts after this unit and applies its own, and asking the bus for it would
+# wait out the activation timeout.
+wanted=
+if systemctl is-active --quiet tuned-ppd && ! { is_current amd_pmf "$DIR/amd-pmf.ko" \
+    && is_current thinkpad_acpi "$DIR/thinkpad_acpi.ko"; }; then
+    wanted=$(busctl get-property "$PPD" "$PPD_PATH" "$PPD" ActiveProfile \
+        | tr -d '"' | awk '{ print $2 }') || wanted=
+fi
+if [ -n "$wanted" ] && [ "$wanted" != balanced ]; then
+    switch_profile balanced
+    trap 'switch_profile "$wanted"' EXIT
+fi
 
 removed_xdna=
 if [ -d /sys/module/amdxdna ] && ! is_current amd_pmf "$DIR/amd-pmf.ko"; then
@@ -114,12 +129,3 @@ if [ -z "$swapped" ]; then
 fi
 
 swap thinkpad_acpi "$DIR/thinkpad_acpi.ko" "$(module_args thinkpad_acpi)" || exit 1
-
-# At boot the profile daemon is ordered after this unit, and asking the bus for it would wait
-# out the activation timeout, 25 s of boot for nothing: the aggregate is realigned only when the
-# daemon is already up, that is after a swap at runtime.
-if systemctl is-active --quiet tuned-ppd && wanted=$(active_profile) \
-    && [ "$(cat "$PROFILE")" != "$wanted" ]; then
-    printf '%s\n' "$wanted" > "$PROFILE"
-    printf 'OK:   platform_profile back to %s\n' "$wanted"
-fi
