@@ -9,7 +9,7 @@
         "Icon": "cpu",
         "Category": "System Information",
         "License": "GPL-3.0-or-later",
-        "Version": "1.1.0",
+        "Version": "1.1.1",
         "Authors": [
             {
                 "Name": "Mattia Rombi"
