@@ -31,8 +31,8 @@ or amdgpu's own level name.
 `Ceiling` lives only in the service's memory, so a restart or a reboot resets it to `0`. When
 the profile leaves `performance`, the service sets `Ceiling` to `0` itself.
 
-TuneD sets the CPU governor and the GPU level on every profile switch. `CpuMode` and `GpuMode`
-then change without a `PropertiesChanged` signal.
+TuneD sets the CPU governor and energy preference on every profile switch, so `CpuMode` changes
+without a `PropertiesChanged` signal. `GpuMode` keeps its value.
 
 The profile is read-only here. It belongs to `tuned-ppd`: write it to
 `net.hadess.PowerProfiles`, as the applet does.
