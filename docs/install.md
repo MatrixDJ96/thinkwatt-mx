@@ -54,10 +54,12 @@ for `sudo` and then:
 ## Updating
 
 The applet shows when a new release is out, or when the running kernel has no drivers, and its
-button runs `thinkwatt-mx-update.service`: it clones the release, builds the drivers for the
-running kernel, runs that release's `scripts/install.sh` and reloads the drivers that changed.
-The service keeps its state: a stopped service stays stopped, and the ceiling and the fan level
-in force are written back. Its log is `journalctl -u thinkwatt-mx-update`.
+button runs `thinkwatt-mx-update.service`: it clones the release and builds the drivers for the
+running kernel. A new release is then installed by its own `scripts/install.sh`, which restarts
+`plasmashell`, and the drivers that changed are reloaded. The service keeps its state: a
+stopped service stays stopped, and the ceiling and the fan level in force are written back. A
+new kernel only gets its drivers, next to those of the other kernels, and the service starts.
+Its log is `journalctl -u thinkwatt-mx-update`.
 
 The popup's title shows the applet's version. When the running service is at another version,
 as after an install from the clone without the restart below, the panel shows the update icon
