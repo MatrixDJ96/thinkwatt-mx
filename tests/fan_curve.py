@@ -11,7 +11,7 @@ Exit status: 0 every case passed, or --self-test saw the breakage it looks for; 
 The decision functions are imported from the service rather than copied, so a change to the
 curve or to the hysteresis reaches this test on the next run. The superseded condition gated
 every change on the temperature being HYSTERESIS below the next band, which held the fan down
-for the four degrees under each threshold: a jump from idle to 85 C left it at level 0.
+for the HYSTERESIS degrees under each threshold: 79 C from idle left it at level 0.
 """
 
 import importlib.machinery
@@ -32,12 +32,12 @@ def load_service():
     return module
 
 
-ocd = load_service()
+service = load_service()
 
 
 def superseded_decide(forced, t, current):
-    up = ocd.wanted(forced, t)
-    down = ocd.wanted(forced, t + ocd.HYSTERESIS)
+    up = service.wanted(forced, t)
+    down = service.wanted(forced, t + service.HYSTERESIS)
     if up != current and (current is None or down == up):
         return up
     return None
@@ -47,7 +47,7 @@ def superseded_decide(forced, t, current):
 def settles_at(forced, *temperatures):
     level = None
     for t in temperatures:
-        new = ocd.decide(forced, t, level)
+        new = service.decide(forced, t, level)
         if new is not None:
             level = new
     return level
@@ -77,25 +77,25 @@ CASES = (
 def main(argv):
     self_test = argv[1:] == ["--self-test"]
     if self_test:
-        ocd.decide = superseded_decide
+        service.decide = superseded_decide
     failures = 0
     for name, want, forced, *temperatures in CASES:
         got = settles_at(forced, *temperatures)
         if got == want:
-            ocd.log(f"OK:   {name}")
+            service.log(f"OK:   {name}")
         else:
-            ocd.log(f"FAIL: {name}: expected {want}, got {got}")
+            service.log(f"FAIL: {name}: expected {want}, got {got}")
             failures += 1
     if self_test:
         if failures:
-            ocd.log(f"OK:   self-test, the superseded condition breaks {failures} cases")
+            service.log(f"OK:   self-test, the superseded condition breaks {failures} cases")
             return 0
-        ocd.log("FAIL: self-test, the superseded condition breaks nothing: the test is blind")
+        service.log("FAIL: self-test, the superseded condition breaks nothing: the test is blind")
         return 1
     if failures:
-        ocd.log(f"FAIL: {failures} cases")
+        service.log(f"FAIL: {failures} cases")
         return 1
-    ocd.log(f"OK: fan curve, {len(CASES)} cases")
+    service.log(f"OK: fan curve, {len(CASES)} cases")
     return 0
 
 

@@ -5,18 +5,18 @@ the design, so the same mistake is not made twice.
 
 ## Firmware and SMU
 
-| assumption                                                 | finding                                                                                                  |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| a written skin target stays in force                       | the firmware sends its table again and the target falls back to 37 °C; the service rewrites it on events |
-| the service's events announce every firmware table         | a table came with no event and the target stayed at 37 °C; `amd_pmf` now counts every `DSTT`             |
-| `amd_pmf` sends the limits on this machine                 | this BIOS uses the OS power slider: `amd_pmf` only notifies, the DSDT sends the table                    |
-| after a release the firmware restores its target by itself | at rest it did not for ten minutes; the patched driver restores it when `0` is written                   |
-| writing `0` puts back the table in force                   | after a profile change it put back 37 °C in `balanced`; the driver now reads each new table's target     |
-| reading the SMU with `ryzenadj` on a timer is safe         | three concurrent callers hung the SMU and the GPU ([`docs/smu.md`](docs/smu.md))                         |
-| one `ryzenadj` caller is safe                              | it collided with the kernel's own writes on a charger change                                             |
-| waiting 5 s after the last power event avoids collisions   | the next event can land during the call; nothing in userspace writes to the SMU now                      |
-| `DYTC_CMD_RESET` clears lap mode for 30 minutes            | it sends the `balanced` table, whose limits equal lap mode's, and turns DYTC off                         |
-| raising PPT slow above 33 W gives more power safely        | it holds the power but the skin keeps heating: the control loop is open                                  |
+| assumption                                                 | finding                                                                                                            |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| a written skin target stays in force                       | the firmware sends its table again and the target falls back to 37 °C; the service rewrites it on events           |
+| the service's events announce every firmware table         | a table came with no event and the target stayed at 37 °C; `amd_pmf` now counts every `DSTT`                       |
+| `amd_pmf` sends the limits on this machine                 | this BIOS uses the OS power slider: `amd_pmf` only notifies, the DSDT sends the table                              |
+| after a release the firmware restores its target by itself | at rest it did not for ten minutes; the patched driver restores it when `0` is written                             |
+| writing `0` puts back the table in force                   | after a profile change it put back 37 °C in `balanced`; the driver now reads the target of each table it overrides |
+| reading the SMU with `ryzenadj` on a timer is safe         | three concurrent callers hung the SMU and the GPU ([`docs/smu.md`](docs/smu.md))                                   |
+| one `ryzenadj` caller is safe                              | it collided with the kernel's own writes on a charger change                                                       |
+| waiting 5 s after the last power event avoids collisions   | the next event can land during the call; nothing in userspace writes to the SMU now                                |
+| `DYTC_CMD_RESET` clears lap mode for 30 minutes            | it sends the `balanced` table, whose limits equal lap mode's outside `low-power`, and turns DYTC off               |
+| raising PPT slow above 33 W gives more power safely        | it holds the power but the skin keeps heating: the control loop is open                                            |
 
 ## Measurements
 
@@ -39,7 +39,7 @@ the design, so the same mistake is not made twice.
 | a `Set` on `net.hadess.PowerProfiles` returns once TuneD applied it         | it returns 0.3 to 0.6 s earlier; `swap.sh` waits for TuneD's `profile_changed`                          |
 | GLib's file monitor sends one event per change                              | it adds a `CHANGES_DONE_HINT` 2 s later; only `CHANGED` counts                                          |
 | a lap mode change is one notification                                       | it is a burst, including the service's own write; the service acts on a change of value only            |
-| fan hysteresis applies in both directions                                   | it held the fan still at 85 °C; the fan now rises at once and waits only when falling                   |
+| fan hysteresis applies in both directions                                   | it held the fan still at 79 °C; the fan now rises at once and waits only when falling                   |
 | a falling fan goes to the curve's level                                     | it chattered between bands; it now falls to the level the curve gives 2 °C higher                       |
 | `thinkpad_acpi` keeps `fan_control=1` across a reload                       | `insmod` takes only its own arguments; `swap.sh` passes the options `modprobe -c` lists                 |
 | units can run code from the clone                                           | the user can write the clone; the service and drivers are copied where only root writes                 |

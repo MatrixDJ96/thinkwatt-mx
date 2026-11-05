@@ -29,25 +29,29 @@ A non-zero write to `stt_skin_temp_apu` is sent to the SMU at once. The driver s
 after its own notification to the BIOS on every profile and power-source change, so the table
 the BIOS sends does not replace it. Values above 255 are refused.
 
-The BIOS also sends tables the driver does not cause: the EC query `_Q3E` calls `DSTT` and
-raises no event ([`envelope.md`](envelope.md#the-firmware-takes-the-target-back)). Two kprobes
-on the AML interpreter, on `acpi_ds_begin_method_execution` and
-`acpi_ds_terminate_control_method`, see each run of `\_SB.PCI0.LPC0.EC0.HKEY.DSTT` start and
-end. At the end the table is in the SMU: `stt_tables` counts one and notifies its readers, and
-inotify sees the change. The probes compare two pointers and touch no mailbox.
+The BIOS also sends tables the driver does not cause: the EC queries `_Q3E` and `_Q40` reach
+`DSTT` and raise no event the service sees
+([`envelope.md`](envelope.md#the-firmware-takes-the-target-back)). Two kprobes on the AML
+interpreter, on `acpi_ds_begin_method_execution` and `acpi_ds_terminate_control_method`, see
+each run of `\_SB.PCI0.LPC0.EC0.HKEY.DSTT` start and end. At the end the table is in the SMU:
+`stt_tables` counts one and notifies its readers, and inotify sees the change. The probes
+compare two pointers and touch no mailbox.
 
 Writing `0` puts back the BIOS table's target. On the static slider that is the slider's value.
-Otherwise, on the V1 interface, it is the target of the latest BIOS table: before the driver
-sends the override over a table that has landed since its last send, it reads the SMU's target.
-The BIOS does not send its table again for an unchanged slider, so the driver keeps that value.
+Otherwise, on the V1 interface, it is the target of the latest BIOS table the override went
+over: before the driver sends the override over a table that has landed since its last send, it
+reads the SMU's target. The BIOS does not send its table again for an unchanged slider, so the
+driver keeps that value. A table that lands after the last send, such as the lap mode table
+while the service holds off, is not read, and `0` puts back the target from before it.
 
 ## `thinkpad_acpi`: lap mode
 
 The stock `dytc_lapmode` is read-only. The patch makes it writable by root, mode `644`. A false
 value (`0`, `n`, `off`) sends `DYTC_DISABLE_CQL`, the same DYTC command the DSDT uses. A true
-value sends `DYTC_ENABLE_CQL`. The attribute then notifies its readers, as it does when the EC
-changes lap mode itself. The EC can set lap mode again at any time
-([`lapmode.md`](lapmode.md)).
+value sends `DYTC_ENABLE_CQL`. When the state changes, the attribute notifies its readers, as
+it does when the EC changes lap mode itself. The patch also keeps lap mode marked present while
+it is read again, so a concurrent reader does not get an empty attribute. The EC can set lap
+mode again at any time ([`lapmode.md`](lapmode.md)).
 
 ## Building
 
@@ -75,14 +79,14 @@ At boot `thinkwatt-mx-kmods.service` runs `swap.sh` before TuneD and the service
 driver whose loaded `srcversion` differs from the installed copy's, `swap.sh` unloads it (with
 `amdxdna`, which holds `amd_pmf`) and loads the patched copy with the options `modprobe` would
 pass, including `thinkpad_acpi.fan_control=1`. Both drivers start their profile handler on
-`balanced`, which `tuned-ppd` would take for the Fn key: when the unit runs again with
+`balanced`, which `tuned-ppd` would take for a kernel change: when the unit runs again with
 `tuned-ppd` up, after an update or the applet's restart, `swap.sh` switches it to `balanced`
 before the reload and back afterwards, each time waiting for TuneD to apply the profile. A
 patched copy that refuses to load gives its place back to the in-tree module, and the unit
 fails.
 
 `srcversion` is a hash of the sources a module was built from: every build of the same sources
-gives the same one, and a changed patch gives another. The `amd_pmf` patch adds
+gives the same one, and a patch that changes code gives another. The `amd_pmf` patch adds
 `MODULE_VERSION`, without which the driver has none.
 
 What to run after a kernel update or a change to the patches is in

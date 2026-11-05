@@ -1,5 +1,6 @@
-# Lenovo's firmware and everything extracted from it: proprietary, never published, regenerable
-# from the public LVFS cabinet as docs/firmware.md describes.
+# Lenovo's firmware and everything extracted from it: proprietary, never published. The image and
+# its extraction regenerate from the public LVFS cabinet as docs/firmware.md describes; ifr/ and
+# smm/'s work/ and disasm/ are the analysis's own working files.
 /research/fw/out/
 /research/fw/*.cab
 /research/fw/firmware.bin

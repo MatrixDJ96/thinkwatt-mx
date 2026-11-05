@@ -32,7 +32,7 @@ fail() {
 }
 
 # Whether the loaded module is this installed copy: srcversion is a hash of the sources a module
-# was built from, the same for every build of them, so a changed patch or source changes it. The
+# was built from, the same for every build of them, so a patch that changes code changes it. The
 # in-tree thinkpad_acpi has another one, the in-tree amd_pmf none, and a module not loaded none.
 is_current() {
     local module=$1 file=$2 loaded
@@ -95,7 +95,7 @@ for file in "$DIR/amd-pmf.ko" "$DIR/thinkpad_acpi.ko"; do
 done
 
 # Both drivers start their platform_profile handler on balanced. Reloaded under another profile,
-# the daemon takes that for the Fn key and its own switch lands last, so the reload runs on
+# the daemon takes that for a kernel change and its own switch lands last, so the reload runs on
 # balanced and the profile in force comes back through the daemon, on success or refusal. At
 # boot the daemon starts after this unit and applies its own, and asking the bus for it would
 # wait out the activation timeout.

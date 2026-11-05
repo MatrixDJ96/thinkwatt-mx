@@ -6,10 +6,11 @@ ceiling 5134 MHz. Load: `stress-ng --cpu 16 --cpu-method matrixprod`.
 
 Contents: the stock leg on the second architecture · what binds · traps that invalidate a
 measurement · with IntelligentCoolingBoost enabled · the thermal fallback · dytc_lapmode pins
-the machine to 14 W · staged for the next boot.
+the machine to 14 W.
 
 **Baseline state**: `IntelligentCoolingBoost=Disable`, stock SMU limits, EC fan curve,
-`amd_pmf` loaded. Reproduce with `tools/tp-bench-power`.
+`amd_pmf` loaded, figures read through `ryzenadj`. The `performance` clock did not reproduce:
+the same protocol later gave 3149 MHz at 22.000 W (below, `CHANGELOG.md`).
 
 | leg         | STAPM / PPT fast / PPT slow / STT | burst 2 s         | sustained                | Tctl                 | fan      |
 | ----------- | --------------------------------- | ----------------- | ------------------------ | -------------------- | -------- |
@@ -21,12 +22,12 @@ the machine to 14 W · staged for the next boot.
 
 Same load and protocol, `tools/tp-bench-power 150 30`, limits and figures read from the patched
 `amd_pmf` (`power_limits`, `metrics`) instead of `ryzenadj`. State: `performance`, no session,
-`IntelligentCoolingBoost=Disable`, `fan_control=Y`, `tp-fand` on its curve, ten minutes after a
-reboot with the desktop idle at 12% (Discord, Teams, JetBrains toolbox in the background), skin
-already 44.9 °C at the start. Limits at the top:
+`IntelligentCoolingBoost=Disable`, `fan_control=Y`, the service's fan curve, ten minutes after
+a reboot with the desktop idle at 12% (Discord, Teams, JetBrains toolbox in the background),
+skin already 44.9 °C at the start. Limits at the top:
 `spl=22000 fppt=43000 sppt=33000 stt_apu=37.00`.
 
-| t         | clock    | W     | Tctl    | skin    | fan      |
+| t         | clock    | W     | core    | skin    | fan      |
 | --------- | -------- | ----- | ------- | ------- | -------- |
 | burst 2 s | 3044 MHz | 21.8  | 67.9 °C | 44.9 °C | —        |
 | t+30      | 3000 MHz | 21.96 | 70.0 °C | 45.1 °C | 2836 rpm |
@@ -36,9 +37,9 @@ already 44.9 °C at the start. Limits at the top:
 | t+150     | 2866 MHz | 21.98 | 72.8 °C | 46.6 °C | 2829 rpm |
 
 Sustained 22.0 W pinned on STAPM as before; the clock averages 2936 MHz over the leg against
-the 3149 MHz of the earlier stock series, with the skin 4 °C warmer from the first sample and
-the desktop not idle. The stock envelope is the same; the clock it buys depends on the chassis
-it starts from, which is why one leg alone never carries a percentage.
+the 3149 MHz of the earlier stock series, with the skin 5.5 °C warmer at t+30 and 4.2 °C at
+t+150, and the desktop not idle. The stock envelope is the same; the clock it buys depends on
+the chassis it starts from, which is why one leg alone never carries a percentage.
 
 ## What binds
 
@@ -53,10 +54,8 @@ ramps while Tctl climbs past 86 °C without settling.
 - A `ryzenadj` write leaves `amd-pmf` reporting `custom`; every later reading is degraded until
   `platform_profile` is rewritten. A baseline taken after a `ryzenadj` write reads ~14 W and
   ~1342 MHz in `performance` — wrong by a third.
-- The stock limits came back about 60 s after a `ryzenadj` write in this run. The restorer is
-  not `amd_pmf` but the EC's `_Q3E` query pushing the STT table, with no fixed timer
-  (`CHANGELOG.md`), and a periodic re-apply is the wrong remedy: the service rewrites the
-  target only on the kernel events that announce a table push (`docs/service.md`).
+- The stock limits came back about 60 s after a `ryzenadj` write in this run: the firmware
+  sends its table again, on the events and EC queries in `docs/envelope.md`.
 - `/etc/modprobe.d` cannot carry `thinkpad_acpi` options: the module loads at 4.1 s inside the
   initramfs, switch-root is at 10.2 s. The kernel argument is the only persistence that works.
 
@@ -113,23 +112,24 @@ into the SMU by `DSTT(n)`. Parameter `0x22` is the skin limit in 8.8 fixed point
 `0x06` and `0x07` are STAPM, PPT fast and PPT slow in milliwatts. Every value measured on this
 machine is one of these bytes:
 
-| table  | skin      | STAPM | fast | slow | profile     |
-| ------ | --------- | ----- | ---- | ---- | ----------- |
-| 6 / 16 | 28 C      | 10 W  | 10   | 10   | low-power   |
-| 3 / 13 | 31 C      | 14 W  | 30   | 25   | balanced    |
-| 8 / 18 | 37 C      | 22 W  | 43   | 33   | performance |
-| 7 / 17 | 31 / 33 C | 14 W  | 30   | 25   | lapmode     |
-| 4 / 14 | 0 C       | 6 W   | 6    | 6    | emergency   |
+| table  | skin      | STAPM | fast | slow | profile              |
+| ------ | --------- | ----- | ---- | ---- | -------------------- |
+| 6 / 16 | 28 C      | 10 W  | 10   | 10   | low-power            |
+| 3 / 13 | 31 C      | 14 W  | 30   | 25   | lapmode, performance |
+| 8 / 18 | 37 C      | 22 W  | 43   | 33   | performance          |
+| 7 / 17 | 31 / 33 C | 14 W  | 30   | 25   | balanced             |
+| 4 / 14 | 0 C       | 6 W   | 6    | 6    | emergency            |
 
 **No table in the firmware exceeds 22 W STAPM.** A more generous envelope is not hidden behind
 a setting — it does not exist. The forced 35 W of the first table came from `ryzenadj` writing
 the limits directly, open loop, and is not a lever (`CHANGELOG.md`): the raised envelope is a
-skin target written into the patched driver (`docs/kernel.md`). lapmode uses balanced's power,
-which is why a clamped machine behaves exactly like balanced while reporting `performance`.
+skin target written into the patched driver (`docs/kernel.md`). In performance and balanced,
+lapmode uses balanced's power, which is why a clamped machine behaves exactly like balanced
+while reporting `performance`.
 
-The only branch selecting between the two halves is `RFIO(0x0B)`, which reads bit 2 of the FCH
+The only branch selecting between the two halves is `RFIO(0x0B)`, which reads bit 16 of the FCH
 GPIO register at `0xFED81500 + (n << 2)` — a physical pin, not a BIOS setting. The halves are
-identical except lapmode's skin limit, 31 C against 33 C. So no BIOS option routes to a
+identical except balanced's skin limit, 31 C against 33 C. So no BIOS option routes to a
 different table, and a gain from `IntelligentCoolingBoost`, if any, cannot come from one:
 performance is table 8/18 either way. It is the same budget used better — consistent with the
 measurement where power settled at 21.3 W instead of pinning at 22.000 W while the clock rose.
@@ -142,7 +142,7 @@ The BIOS option does not gate the lap clamp. It clears one advertisement bit, no
 `2A4DC6B7-41F5-45DD-B46F-2DD334C1CF65`, 0xF8 bytes) at boot and, for byte 0x76
 (`CoolQuietOnLap`), does exactly this:
 
-```
+```text
 cmp byte [rbp+0x86], bl          ; CoolQuietOnLap == 0 (Disabled) ?
 jne  ...                         ; Enabled: skip
 and  word [rax+0xee8], 0xfffd    ; Disabled: clear bit 1 of the word at NVS+0xEE8
@@ -155,10 +155,10 @@ own constants confirm the mapping three times over: `DYTC_FC_MMC` 27 against
 `DYTC_FUNCTION_MMC` 11, `DYTC_FC_PSC` 29 against 13, `DYTC_FC_AMT` 31 against 15. So FCAP bit 1
 is `DYTC_FUNCTION_CQL` — lap mode.
 
-`VCQL` itself sits two bytes further on, at 0xEEA bit 1, and is not touched: the clamp comes
-from `DSTT` pushing a different SMU table and never consults `FCAP`. So `Disable` removes the
-sign, not the mechanism, which is why the option reads Disabled while the machine still drops
-to 14 W.
+`VCQL` itself sits two bytes further on, at 0xEEA bit 1; the module clears it at boot, whatever
+the option, when it initialises `FCAP` before this step. The clamp comes from `DSTT` pushing a
+different SMU table and never consults `FCAP`. So `Disable` removes the sign, not the
+mechanism, which is why the option reads Disabled while the machine still drops to 14 W.
 
 `IntelligentCoolingBoost` (varstore 0x63) is never read by this module at all.
 
@@ -167,7 +167,7 @@ read-only kernel module (build against `/lib/modules/$(uname -r)/build`, `sig_en
 an unsigned module loads; the probe returns an error from init so it unloads itself, leaving
 only a tainted-kernel flag that a reboot clears):
 
-```
+```text
 DYTC(0x03) = 0x20910001   -> FCAP = 0x2091, bits 0, 4, 7, 13 set, **bit 1 clear**
 DYTC(0x02) = 0x20014d01   -> bit 17 (lapmode) = 0; CICF = 0xD = PSC; CICM = 4 = PSCV9 perform
 DYTC(0x00) = 0x90000101   -> identical to the DSDT literal; revision 9, enabled
@@ -201,7 +201,9 @@ it writes EC register 0xCB with PAR1 and returns. `LenovoSmapiSmm` is correctly 
 `cmp al, 0xa` bounds a SMAPI sub-function on a stack copy of the CPU save-state, unrelated.
 
 The profile path is separate: `_Q6D`/`_Q6E`/`_Q6F` call DYTC with ICFunc 13 (PSC) and ICMode
-7/5/3 for performance/balanced/low-power, which is why writing `platform_profile` never moves
+7/5/3, the PSC mode numbers of DYTC before version 9; this BIOS's PSC branch tests 4 and 1|2, so
+with lap mode off all three select table 7/17. A `platform_profile` write goes through
+`thinkpad_acpi`'s PSC v9 modes 4/3/1 and never writes `VCQL`, which is why it never moves
 lapmode.
 
 What the EC bases its decision on is in EC firmware and not readable. But the deciding bit now
@@ -212,7 +214,7 @@ is: poll `EC[0xC4]` bit 0.
 Issuing `DYTC(0x000F1001)` — ICFunc 1, ValidF 0, the same call `_Q3C` makes when the EC leaves
 lap mode — clears it outright:
 
-```
+```text
 before  lapmode=1   STAPM 14.000   PPT slow 25.000   STT 31
 after   lapmode=0   STAPM 25.891   PPT slow 33.000   STT 37
 ```
@@ -222,18 +224,8 @@ STT 37. `EC[0xC4]` bit 0 stays 1 throughout: the EC keeps its own opinion, and t
 until it raises SCI 0x3C again, so this is a remedy to re-issue, not a permanent setting.
 
 The call is issued by writing `0` to `dytc_lapmode`, which the patched `thinkpad_acpi` makes
-writable (`docs/kernel.md`); `bin/thinkwatt-mxd` writes it at start and at every flip to `1`
-(`docs/service.md`).
-
-**Superseded — this was the open question:** `SmmAslSmi` is confirmed as the dispatcher
-registering `SwSmiInputValue = 0xF5`, reading CMD at mailbox +0xFC0 and clearing ERR at +0xFC1
-— the disassembly matches the ASL byte for byte. But its jump table is empty in the flash image
-and is populated at runtime, so the owner of class 0x0A cannot be named statically.
-`LenovoSmapiSmm` was the leading suspect and is ruled out: it never touches the mailbox
-offsets.
-
-Caveat: the image analysed is `R2USG17W` from LVFS; the reference machine runs `R2UET33W`. Same
-platform, different build stream.
+writable (`docs/kernel.md`); `bin/thinkwatt-mxd` writes it when the file reads `1` at start and
+each time it changes to `1` (`docs/lapmode.md`).
 
 ### Raising the ceiling: one knob, and it holds
 
@@ -244,10 +236,7 @@ temperature target every cycle. `--slow-limit` by contrast is accepted. The sing
 temperature the governor aims for, and the power settles wherever the thermals put it.
 
 The write held for three minutes here with no reapplication. Later runs saw the firmware take
-the target back at rest, on no fixed timer and not by `amd_pmf`: the EC's `_Q3E` query pushes
-the STT table, and a periodic re-apply cost the second SMU incident (`CHANGELOG.md`,
-`docs/smu.md`). The service rewrites the target on the kernel events that announce a push
-(`docs/service.md`).
+the target back; when and how the service writes it again is in `docs/envelope.md`.
 
 Measured under a full 16-thread load at target 47, sampled every 30 s to 150 s:
 
@@ -268,8 +257,9 @@ regulating, and climbed past 86 C without settling. Raising the skin target inst
 governor hold the equilibrium.
 
 Full speed buys 6 C at the same power and clock, so it is headroom, not performance. The real
-cost is the chassis: 43 C to 46 C, which is precisely what the factory 37 C target existed to
-prevent.
+cost is the chassis: 43 C to 46 C against the `Enable` leg, about 2 C in the same-protocol
+`Disable` series (42.4 to 44.1 C in `docs/envelope.md`), which is precisely what the factory 37
+C target existed to prevent.
 
 ### The lapmode mechanism, from the decompiled DSDT
 
@@ -281,10 +271,6 @@ Temperature Tracking table: the 31 C against 37 C limit. So lapmode is a softwar
 whose write swaps the SMU's power table — no sensor and no heuristic are involved, which is why
 shaking the machine does nothing.
 
-`VCQL` lives in `OperationRegion (MNVS, SystemMemory, 0x26C4E018, 0x5050)`, ACPI NVS shared
-with SMM. Calling `DCSE` through `acpi_call` would clear it, but SMM owns that memory and can
-write it back, the way the EC's `_Q3E` query restores the limits (`CHANGELOG.md`). Untested.
-
 Writing `platform_profile` does NOT set lapmode: six writes across all three profiles left it
 at 0 while the limits followed the profile correctly (STT 28/31/37, STAPM 10/14/25.8 W). The
 profile path uses other DYTC functions and never touches `VCQL`.
@@ -292,10 +278,3 @@ profile path uses other DYTC functions and never touches `VCQL`.
 Any measurement must read lapmode first. `stt_apu` in `power_limits` shows this state without
 naming it: `tools/tp-bench-soc` and `tools/tp-bench-power` print the limits above their figures
 and leave the reading to whoever ran them.
-
-## Staged for the next boot
-
-- BIOS `IntelligentCoolingBoost` `Disable` → `Enable`. Applied and measured: see above; it is
-  back on `Disable` (`ROADMAP.md`). Lenovo documents it as app-aware dynamic adjustment.
-- Kernel argument `thinkpad_acpi.fan_control=1`, staged with `rpm-ostree kargs`. Fan control
-  was proven live: auto 2809 rpm, `level 7` 3236, `level full-speed` 3865 (4830 under load).

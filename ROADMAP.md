@@ -25,8 +25,7 @@
 ## Service
 
 - **CPU use.** The service takes about 0.4% of one core, mostly the applet's `ReadFigures` call
-  every 500 ms (about 1.4 ms each). Lower it in the next release
-  ([`docs/dbus.md`](docs/dbus.md)).
+  every 500 ms (about 1.4 ms each). Cutting what `ReadFigures` costs is open.
 
 ## Distribution
 

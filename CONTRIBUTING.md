@@ -12,7 +12,7 @@ release and the service log, which most problems need.
 
 The gates need `shellcheck`, `shfmt`, `ruff` and `gettext` on `PATH`, and PyGObject in the
 `python3` found there (`python3-gobject` on Fedora). Run every gate, then prove that the
-linters reject bad input:
+linters, the width guard and the locale gate reject bad input:
 
 ```bash
 scripts/check.sh
@@ -27,8 +27,9 @@ fan curve test. CI runs both commands on every push and pull request.
 The installed copies run, not the repository. After a change, install and restart:
 
 ```bash
+kmods/build.sh
 scripts/install.sh
-sudo systemctl restart thinkwatt-mx
+sudo systemctl restart thinkwatt-mx-kmods thinkwatt-mx
 ```
 
 Then check the service as a `wheel` user, in the `performance` profile:
@@ -39,6 +40,7 @@ P=/io/github/matrixdj96/ThinkwattMX
 busctl set-property $S $P $S Ceiling u 47
 busctl call $S $P $S ReadLimits
 busctl set-property $S $P $S Ceiling u 0
+busctl call $S $P $S ReadLimits
 ```
 
 `ReadLimits` should show `stt_apu` at 47 while the target is set, and at 37 after the release.

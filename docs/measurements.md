@@ -1,7 +1,7 @@
 # Measurements
 
 Two benches in `tools/` measure the machine; the reference runs below are `tp-bench-power`'s.
-Both load all 16 threads and make the desktop lag while they run.
+Both load the machine and make the desktop lag while they run.
 
 - `tools/tp-bench-power` loads the CPU, takes a 2 s burst sample, then samples every 30 s for
   150 s.

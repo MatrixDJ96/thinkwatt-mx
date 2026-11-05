@@ -1,4 +1,4 @@
-# thinkwatt-mx — power management for the ThinkPad L14 Gen 6 AMD
+# thinkwatt-mx: power management for the ThinkPad L14 Gen 6 AMD
 
 A root service on the system bus (`bin/thinkwatt-mxd`, Python with PyGObject), two patched
 kernel drivers built per release, and a KDE Plasma 6 applet. Its subject is one machine, the
@@ -8,11 +8,16 @@ measurement in `docs/` was taken there. The units run installed copies, never th
 ## Build & run
 
 ```bash
-kmods/build.sh                       # drivers for the running kernel into kmods/<release>/
-scripts/install.sh                   # copies, units, SELinux rule, policy, applet; no start
-sudo systemctl restart thinkwatt-mx  # the service runs the freshly installed copy
-scripts/check.sh                     # every gate: width, lint, format, locale, fan test
-scripts/check.sh --self-test         # the linters, width guard and locale gate refuse bad input
+# drivers for the running kernel into kmods/<release>/
+kmods/build.sh
+# copies, units, SELinux rule, policy, applet; no start
+scripts/install.sh
+# the fresh drivers and service
+sudo systemctl restart thinkwatt-mx-kmods thinkwatt-mx
+# every gate: width, lint, format, locale, fan test
+scripts/check.sh
+# the linters, width guard and locale gate refuse bad input
+scripts/check.sh --self-test
 ```
 
 - `kmods/build.sh` needs the kernel headers and the network.
@@ -48,9 +53,9 @@ scripts/check.sh --self-test         # the linters, width guard and locale gate 
 ## Gotchas
 
 - Only the kernel's drivers talk to the SMU: `amd_pmf` for the skin target and the limits,
-  `amdgpu` for the GPU level and readings. A `ryzenadj` call concurrent with another SMU
-  client, a second `ryzenadj` or the firmware's AML on a power-source change, wedged the
-  mailbox and took the GPU down (`docs/smu.md`).
+  `amdgpu` for the GPU level and readings. A `ryzenadj` call concurrent with another SMU client
+  (a second `ryzenadj`, or the firmware's AML on a power-source change) wedges the mailbox and
+  takes the GPU down (`docs/smu.md`).
 - Without the SELinux rule `scripts/install.sh` lays on
   `/usr/local/libexec/thinkwatt-mx/kmods(/.*)?`, the kernel refuses the patched modules:
   `thinkwatt-mx-kmods` fails with `FAIL: <file> refused to load`, `thinkwatt-mx` does not
@@ -64,7 +69,7 @@ scripts/check.sh --self-test         # the linters, width guard and locale gate 
   `(ssv)` and a `DBus.variant`.
 - Inside `fullRepresentation` and `compactRepresentation`, an `Item` property shadows an outer
   id of the same name: no id may be named `state` or `scale`.
-- `tools/tp-bench-power` and `tools/tp-bench-soc` load every core and lag the desktop; the
+- `tools/tp-bench-power` and `tools/tp-bench-soc` load the machine and lag the desktop; the
   protocol is in `docs/measurements.md`.
 
 ## Boundaries
@@ -76,8 +81,7 @@ scripts/check.sh --self-test         # the linters, width guard and locale gate 
 
 ## Docs
 
-- `docs/install.md` — requirements, updating, removing, the log lines that name a fix.
-- `docs/kernel.md` — before touching `kmods/`: what each patch adds and how `swap.sh` loads it.
-- `docs/envelope.md` and `docs/lapmode.md` — before changing what the service writes, and why.
-- `docs/fan.md` — the curve and its hysteresis, before touching the fan loop.
-- `docs/firmware.md` — regenerating the LVFS image and its extraction, which git ignores.
+- `docs/kernel.md`: what each patch adds and how `swap.sh` loads it, before touching `kmods/`.
+- `docs/envelope.md` and `docs/lapmode.md`: before changing what the service writes, and why.
+- `docs/fan.md`: the curve and its hysteresis, before touching the fan loop.
+- `docs/firmware.md`: regenerating the LVFS image and its extraction, which git ignores.

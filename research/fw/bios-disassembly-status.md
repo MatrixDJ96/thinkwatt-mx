@@ -7,8 +7,7 @@ setup variables do not appear in the AML, so the DSDT cannot answer it.
 Done:
 
 - `R2USG17W.cab` from LVFS, sha256 verified against the LVFS filename hash. The reference
-  machine runs `R2UET33W` (0.1.19); LVFS tops out at 0.1.17, same platform, different build
-  stream.
+  machine runs `R2UET33W` (0.1.19); LVFS tops out at 0.1.17, one release behind (see below).
 - `firmware.bin`, the UEFI capsule, unpacked with `uefi-firmware-parser -b -e` (the `-b` is
   required: a capsule header precedes the first volume, whose magic is at 0x50).
 - 2776 files, 537 modules, in `out/`. An `NVRAM_EVSA` volume is present — the Insyde variable
@@ -37,7 +36,7 @@ lead.
 
 **The SMI path is decoded.** `Method (SMI, 5, Serialized)` at DSDT line 10102:
 
-```
+```text
 CMD = Arg0; ERR = 0x01; PAR0..PAR3 = Arg1..Arg4; APMC = 0xF5
 While (ERR == 0x01) { Sleep (1); APMC = 0xF5 }
 Return (PAR0)
@@ -51,7 +50,7 @@ are a different family, passing one byte through `APMD` at 0xB1: `GSMI` uses 0xE
 So 0xF5 is necessary but not sufficient to identify our handler — the mailbox accesses are.
 
 Class 0x0A sub-functions: 0x03 `TSDL` and 0x06 `HOTL` on the critical threshold, 0x04 `FLPF`
-swapping the SMU skin-temperature table, 0x05 `GTST` never called from AML.
+writing EC register 0xCB, 0x05 `GTST` never called from AML.
 
 **SMM candidates.** 20 modules register `EFI_SMM_SW_DISPATCH2_PROTOCOL`, none the legacy one.
 Searching every file for the `LenovoConfig` GUID gives 55 modules, too many to discriminate,
@@ -70,7 +69,7 @@ the `.html` serves). It also resolves the version numbering: package "System Fir
 contains UEFI BIOS 1.33, ECP 1.25, Power Delivery 1.04 — so fwupd's 0.1.19 and the DMI's
 `R2UET33W (1.33)` and `ec_firmware_release 1.25` are the same release seen from three angles,
 and the reference machine is on the current one. LVFS stops at 1.17, one release behind. From
-1.17 to 1.19: three CVE fixes (2026-46658, -46659, -6726, -6727), PI 1.2.0.0h, a
+1.17 to 1.19: four CVE fixes (2026-46658, -46659, -6726, -6727), PI 1.2.0.0h, a
 discharge-when-off fix, a hang-at-logo fix and a power-on fix after factory reset. Nothing
 thermal, nothing DYTC. Note the release cannot be rolled back below 1.19.
 
@@ -81,12 +80,12 @@ boot — `MNVS` is `0x03FF9FB0` in flash and `0x26C4E018` live — plus one rena
 `NOS3`, the firmware disabling S3 sleep so this machine is s2idle only. No logic differs:
 `DYTC`, `IDGV`, `DCSE`, `DCGE`, `DCFC`, the twenty `STTS` tables and `FCAP` are identical.
 
-The three steps that remained are done and the answer is negative: no SMM code writes `VCQL`;
-`TpAcpiNvsInitDxe` only clears bit 1 of `FCAP` at boot, and the class `0x0A` handler lives
-inside `SmmAslSmi`. See `../../docs/firmware.md`.
+The search is done and the answer is negative: no SMM code writes `VCQL`; `TpAcpiNvsInitDxe`
+initialises `FCAP` and clears `VCQL` at boot, and the `CoolQuietOnLap` option only clears bit 1
+of `FCAP`; and the class `0x0A` handler lives inside `SmmAslSmi`. See `../../docs/firmware.md`.
 
 The firmware image and everything extracted from it (`firmware.bin`, `firmware.metainfo.xml`,
 `out/`, `smm/work/`, `smm/disasm/`, `ifr/`) are Lenovo's and are not in the repository; the
-scripts and their `.txt` and `.tsv` results are. `R2USG17W.cab` is public on
-`https://fwupd.org/downloads/`; `cabextract` yields `firmware.bin`, the checksum is in
-`firmware.metainfo.xml`, and `../../docs/firmware.md` lists every file the procedure produces.
+scripts, their `.txt` output and the `.tsv` GUID tables are. `R2USG17W.cab` is public on
+`https://fwupd.org/downloads/`; `cabextract` yields `firmware.bin` and the checksum is in
+`firmware.metainfo.xml`.

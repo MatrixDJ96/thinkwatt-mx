@@ -2,7 +2,7 @@ SPDX-License-Identifier: GPL-2.0-only
 
 --- a/drivers/platform/x86/lenovo/thinkpad_acpi.c
 +++ b/drivers/platform/x86/lenovo/thinkpad_acpi.c
-@@ -10190,12 +10190,17 @@
+@@ -10196,12 +10196,17 @@ static int lapsensor_get(bool *present, bool *state)
  {
  	int output, err;
  
@@ -23,7 +23,7 @@ SPDX-License-Identifier: GPL-2.0-only
  	*state = output & BIT(DYTC_GET_LAPMODE_BIT) ? true : false;
  	return 0;
  }
-@@ -10256,7 +10261,12 @@
+@@ -10262,7 +10267,12 @@ static ssize_t dytc_lapmode_show(struct device *dev,
  		return sysfs_emit(buf, "%d\n", lap_state);
  	return sysfs_emit(buf, "\n");
  }
@@ -37,15 +37,15 @@ SPDX-License-Identifier: GPL-2.0-only
  
  static ssize_t palmsensor_show(struct device *dev,
  					struct device_attribute *attr,
-@@ -10534,6 +10544,38 @@
-  * dytc_profile_set: Function to register with platform_profile
-  * handler. Sets current platform profile.
-  */
+@@ -10536,6 +10546,38 @@ static int dytc_cql_command(int command, int *output)
+ 	return cmd_err;
+ }
+ 
 +/*
 + * Write 0 to leave lap mode, 1 to enter it, through the same DYTC set command
 + * the firmware's own EC query issues. The EC keeps its own opinion, so the
-+ * change holds until the EC decides again; the completion event refreshes
-+ * lap_state and notifies the attribute as for any other change.
++ * change holds until the EC decides again. The store refreshes lap_state and,
++ * when the state changed, notifies the attribute itself.
 + */
 +static ssize_t dytc_lapmode_store(struct device *dev,
 +				  struct device_attribute *attr,
@@ -73,6 +73,6 @@ SPDX-License-Identifier: GPL-2.0-only
 +	return count;
 +}
 +
- static int dytc_profile_set(struct device *dev,
- 			    enum platform_profile_option profile)
- {
+ /*
+  * dytc_profile_set: Function to register with platform_profile
+  * handler. Sets current platform profile.

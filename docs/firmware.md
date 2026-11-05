@@ -8,7 +8,8 @@ differ in anything this document describes.
 
 - `research/thinkpad-l14-dsdt.dsl`: the reference machine's DSDT, decompiled
 - `research/fw/smm/*.py`: the scripts that scan the extracted image
-- `research/fw/smm/*.txt` and `research/fw/guid/*.tsv`: their results
+- `research/fw/smm/*.txt`: their results
+- `research/fw/guid/*.tsv`: GUID cross-reference tables
 - `research/fw/bios-disassembly-status.md`: the analysis notes, with the varstores and the SMM
   handlers
 

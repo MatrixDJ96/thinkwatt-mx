@@ -286,7 +286,8 @@ else
     fi
 fi
 version=$(sed -n 's/.*"Version": "\([^"]*\)".*/\1/p' "$HERE/widget/package/metadata.json")
-# The release tag this tree is, clean, or nothing: only a release is rebuilt by the updater.
+# The release tag this tree is, with -dirty when a tracked file has changes, or nothing: only a
+# clean release is rebuilt by the updater.
 release=$(git -C "$HERE" describe --tags --exact-match --dirty 2> /dev/null || true)
 
 "$HERE/widget/build-locale.sh" --compile

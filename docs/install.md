@@ -13,7 +13,7 @@
 | a user in the `wheel` group      | changes settings without a password                         |
 | `git`                            | the updater clones the release, the installer reads its tag |
 
-On other systems the build or the installer stops at a known point:
+On other systems the build or the installer fails, or ThinkWatt MX behaves differently:
 
 | system                    | what happens                                               |
 | ------------------------- | ---------------------------------------------------------- |
@@ -34,8 +34,8 @@ On other systems the build or the installer stops at a known point:
 - The updater installs, as root and without a password, the latest release published on GitHub,
   and releases are not signed: whoever can publish a release there can run code as root on the
   machine at its next update. The drivers it builds come from the kernel sources on
-  `raw.githubusercontent.com/gregkh/linux` and OGC's release assets, which it trusts the same
-  way.
+  `raw.githubusercontent.com/gregkh/linux`, which it trusts the same way; OGC's
+  `monolithic.patch` is only read, to check that it leaves those sources alone.
 - The service runs as root. Report security problems as described in
   [`SECURITY.md`](../SECURITY.md).
 - ThinkWatt MX comes with no warranty.
@@ -103,7 +103,7 @@ journalctl -u thinkwatt-mx -b
 
 | log line                                              | fix                                             |
 | ----------------------------------------------------- | ----------------------------------------------- |
-| `the patched drivers are not loaded`                  | run `kmods/build.sh`, then `scripts/install.sh` |
+| `the patched drivers are not loaded`                  | the steps of [Updating](#updating) from a clone |
 | `kernel argument thinkpad_acpi.fan_control=1 missing` | add the argument, then reboot                   |
 | `is the bus policy installed?`                        | run `scripts/install.sh` again                  |
 

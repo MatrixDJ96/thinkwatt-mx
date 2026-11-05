@@ -1,8 +1,9 @@
 # Lap mode
 
 When `/sys/devices/platform/thinkpad_acpi/dytc_lapmode` reads `1`, the firmware applies its lap
-mode table: STAPM 14 W, PPT fast 30 W, PPT slow 25 W, skin target 31 °C. These are the
-`balanced` limits. `platform_profile` still reads `performance`, and writing it again does not
+mode table. In `performance` and `balanced` that is STAPM 14 W, PPT fast 30 W, PPT slow 25 W,
+skin target 31 °C, the `balanced` limits; in `low-power` it is 31 °C with 10 W for all three
+limits. `platform_profile` keeps reading the profile in force, and writing it again does not
 lift the cap.
 
 ## How the EC sets it
@@ -46,10 +47,11 @@ the same `DYTC` path as the EC's event. The service should log `lap mode 1: clea
 
 | attempt                      | result                                                                            |
 | ---------------------------- | --------------------------------------------------------------------------------- |
-| `DYTC_CMD_RESET` (`0x1FF`)   | the limits stay at lap mode's, `dytc_lapmode` keeps `1`, and DYTC turns off       |
+| `DYTC_CMD_RESET` (`0x1FF`)   | the limits become `balanced`'s, `dytc_lapmode` keeps `1`, and DYTC turns off      |
 | BIOS option `CoolQuietOnLap` | clears one declaration bit; lap mode still applies ([`firmware.md`](firmware.md)) |
 
 The reset runs `DCRE`, which clears `VCQL` and sends table 7 or 17, the `balanced` table, whose
-limits equal lap mode's. It raises no HKEY event `0x6032`, and `thinkpad_acpi` refreshes
-`dytc_lapmode` only on that event, so the attribute keeps its last value. To turn DYTC back on
-after a reset, set the profile to `balanced` and then back to `performance`.
+limits equal lap mode's outside `low-power`. It raises no HKEY event `0x6032`, and
+`thinkpad_acpi` refreshes `dytc_lapmode` only on that event, so the attribute keeps its last
+value. To turn DYTC back on after a reset, set the profile to `balanced` and then back to
+`performance`.

@@ -31,21 +31,19 @@ inside the burst opens the file at the moment tuned-ppd is deciding whether the 
 the kernel, which makes it read the value the handlers have not yet replaced and set that back.
 
 The fan is the one timer: Tctl sampled from k10temp every second, a decision on the peak of
-three samples, up at once and down with two degrees of hysteresis, the EC watchdog re-armed at
-120 s at every decision so a dead service hands the fan back to the EC. FanLevel picks what the
-loop writes: `curve` the curve, a fixed level that level, overridden by full speed from 90 C
-until Tctl is back under 85 C, `auto` hands the fan to the EC and the loop idles. This is the
-only writer of /proc/acpi/ibm/fan.
-
-The three inotify watches are on the attributes' inodes: a driver swapped by hand while the
-service runs takes its events with it, and `systemctl restart thinkwatt-mx` re-arms them.
+three samples, up at once and down with two degrees of hysteresis, the driver's fan watchdog
+re-armed at 120 s at every decision so a hung loop hands the fan back to the EC, except at
+level 7, which the driver keeps as its emergency level. FanLevel picks what the loop writes:
+`curve` the curve, a fixed level that level, overridden by full speed from 90 C until Tctl is
+back under 85 C, `auto` hands the fan to the EC and the loop idles. This is the only writer of
+/proc/acpi/ibm/fan.
 """
 
 import glob
 import os
-import stat
 import signal
 import socket
+import stat
 import sys
 
 import gi
@@ -118,8 +116,8 @@ FLOOR_RELEASE = 85
 WATCHDOG = 120
 SAMPLES = 3
 # Measured rpm per level: 0, 2070, 2310, 2489, 2684, 2840, 3092, 3246, then 4838 for
-# full-speed, the EC's disengaged mode. The regulated levels are 154 to 252 rpm apart, so three
-# degrees each spreads them over the band the machine actually works in; the one step that
+# full-speed, the EC's disengaged mode. The regulated levels are 154 to 252 rpm apart, so three or
+# four degrees each spreads them over the band the machine actually works in; the one step that
 # moves real air is the last, and it lands at 80 C, where a sustained 33 W settles.
 CURVE = ((80, FULL_SPEED), (77, "7"), (74, "6"), (71, "5"), (68, "4"), (65, "3"), (62, "2"),
          (58, "1"))
@@ -345,7 +343,7 @@ class Service:
         self.push_ceiling()
         return False
 
-    # The firmware sent an STT table, maybe from an EC query that raises no event (_Q3E). Each
+    # The firmware sent an STT table, maybe from an EC query that raises no event (_Q3E, _Q40). Each
     # notification raises several inotify events: only a new count is acted on.
     def on_stt_tables(self, *_):
         tables = read_attribute(STT_TABLES)
@@ -582,9 +580,9 @@ class Service:
 
 def main():
     if os.geteuid() != 0:
-    # Root passes os.access whatever the mode: a stock driver shows in the owner's write bit.
         log("FAIL: root required")
         return 1
+    # Root passes os.access whatever the mode: a stock driver shows in the owner's write bit.
     for path in (SKIN_TARGET, LAPMODE):
         try:
             writable = os.stat(path).st_mode & stat.S_IWUSR

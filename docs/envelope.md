@@ -1,8 +1,9 @@
 # The power envelope
 
-In the `performance` profile, under full load, the stock machine holds 22.00 W. Tctl settles at
-67.6 °C, thirty degrees below its limit, and the fan stays at level 3. Neither the silicon nor
-the cooling stops it. The limit that binds is STAPM (Skin Temperature Aware Power Management).
+In the `performance` profile, under full load, the stock machine holds 22.00 W. The hottest
+core settles at 67.6 °C, thirty degrees below its limit, and the fan stays at level 3. Neither
+the silicon nor the cooling stops it. The limit that binds is STAPM (Skin Temperature Aware
+Power Management).
 
 ## The skin temperature target
 
@@ -25,12 +26,12 @@ Measured under `stress-ng --cpu 16 --cpu-method matrixprod`, 150 s per run
 | --------------- | -------- | -------------------- | -------------------- |
 | sustained power | 22.00 W  | 33.00 W              | 33.00 W              |
 | all-core clock  | 3149 MHz | 3818 MHz             | 3834 MHz             |
-| Tctl, steady    | 67.6 °C  | 76–79 °C             | 72.0 °C              |
+| hottest core    | 67.6 °C  | 76–79 °C             | 72.0 °C              |
 | skin            | 42.4 °C  | 44.1 °C              | 43.0 °C              |
 | fan             | 2477 rpm | 3205–4830 rpm        | 4800 rpm             |
 
 The raised target gives 21% more sustained clock for 11 W. Its cost is the skin temperature,
-about 2 °C higher. Running the fan at full speed lowers Tctl but adds no power.
+about 2 °C higher. Running the fan at full speed lowers the core temperature but adds no power.
 
 ## Why 33 W
 
@@ -48,13 +49,13 @@ The DSDT holds `STTS`, twenty tables of twelve SMU parameters. `DSTT(n)` sends o
 SMU through ALIB. Parameter `0x22` is the skin target; `0x2E`, `0x06` and `0x07` are STAPM, PPT
 fast and PPT slow. Each value measured on this machine is one of these entries:
 
-| tables | skin      | STAPM | PPT fast | PPT slow | used for    |
-| ------ | --------- | ----- | -------- | -------- | ----------- |
-| 6, 16  | 28 °C     | 10 W  | 10 W     | 10 W     | low-power   |
-| 3, 13  | 31 °C     | 14 W  | 30 W     | 25 W     | lap mode    |
-| 8, 18  | 37 °C     | 22 W  | 43 W     | 33 W     | performance |
-| 7, 17  | 31, 33 °C | 14 W  | 30 W     | 25 W     | balanced    |
-| 4, 14  | not sent  | 6 W   | 6 W      | 6 W      | emergency   |
+| tables | skin      | STAPM | PPT fast | PPT slow | used for                |
+| ------ | --------- | ----- | -------- | -------- | ----------------------- |
+| 6, 16  | 28 °C     | 10 W  | 10 W     | 10 W     | low-power               |
+| 3, 13  | 31 °C     | 14 W  | 30 W     | 25 W     | lap mode in performance |
+| 8, 18  | 37 °C     | 22 W  | 43 W     | 33 W     | performance             |
+| 7, 17  | 31, 33 °C | 14 W  | 30 W     | 25 W     | balanced                |
+| 4, 14  | not sent  | 6 W   | 6 W      | 6 W      | emergency               |
 
 `DSTT` skips a zero entry, so tables 4 and 14 leave the skin target as it was. No table allows
 more than 22 W of STAPM, so no BIOS option gives more.
@@ -74,5 +75,5 @@ The patched `amd_pmf` sees every run of `DSTT`, whatever calls it, and counts it
 and after each event it can see ([`dbus.md`](dbus.md#events)). The emergency table's 6 W limits
 stay in force: the service writes only the skin target.
 
-Writing `0` to `stt_skin_temp_apu` puts back the latest table's target
-([`kernel.md`](kernel.md)).
+Writing `0` to `stt_skin_temp_apu` puts back the target of the latest table the override went
+over ([`kernel.md`](kernel.md)).

@@ -7,7 +7,8 @@
 #
 # Prints the state it found, then the burst sample and one line per interval with clock, power,
 # Tctl, skin and fan.
-# Exit status: 0 measured, 1 a prerequisite is missing or an argument is not a number.
+# Exit status: 0 measured, 1 a prerequisite is missing, an argument is not a number or the
+# interval is longer than the leg.
 #
 # It changes nothing: no profile, no ceiling, no fan. Preparing the machine - the profile, the
 # ceiling, a clear desktop - belongs to whoever runs it, and the state printed on top is what
@@ -82,8 +83,8 @@ leg() {
     sleep 2
     printf '  burst 2 s  clock=%-6s W/Tctl/skin= %s\n' "$(freq)" "$(values)"
     wait
-    # The SMU averages STAPM over 19.2 s: the sustained leg starts once the burst has left that
-    # window, or its first sample would carry the burst's energy. No event says the average is
+    # The SMU averages STAPM over a window no source here measures: 25 s is a margin, so the
+    # sustained leg's first sample does not carry the burst's energy. No event says the average is
     # clean, and polling the table until it is would only rediscover the window's length.
     sleep 25
     load "$((secs + 5))s"

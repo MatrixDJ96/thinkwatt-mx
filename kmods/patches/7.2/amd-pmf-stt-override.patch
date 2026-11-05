@@ -108,7 +108,7 @@ SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Sends the override, if one is set, on the PMF mailbox. A BIOS table that
 + * landed since the last send holds the SMU's target now: on the V1 interface
-+ * its value is read first, so that 0 puts back the latest table's target.
++ * its value is read first, so that 0 puts back the target it goes over.
 + */
 +void amd_pmf_apply_stt_override(struct amd_pmf_dev *pmf)
 +{
@@ -285,7 +285,7 @@ SPDX-License-Identifier: GPL-2.0-only
 +
 +/*
 + * _Q3E, _Q40, _Q4B and DYTC send the BIOS STT tables through DSTT, and no
-+ * Notify marks one. Two probes on the AML interpreter see each run of DSTT
++ * Notify marks every one. Two AML interpreter probes see each run of DSTT
 + * begin and end; at the end, with the table in the SMU, stt_tables counts one
 + * and notifies its readers.
 + */

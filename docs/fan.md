@@ -26,13 +26,17 @@ it starts at 80 °C, where the machine settles at 33 W.
 ## Fixed levels
 
 A fixed level from `0` to `7` stays as chosen until Tctl reaches 90 °C. The fan then runs at
-full speed until Tctl falls below 85 °C, and the log marks this as `(thermal floor)`.
+full speed until Tctl falls below 85 °C, and the log marks this as `(thermal floor)`. A fixed
+level chosen while the fan already runs at full speed, at 85 °C or more, keeps full speed until
+Tctl falls below 85 °C.
 
 ## How the loop runs
 
 Once a second the service reads Tctl from `k10temp`. Every three readings it takes the highest
 and decides the level. It writes a new level to `/proc/acpi/ibm/fan`, and at each decision sets
-the EC's watchdog to 120 s. If the service dies, the EC takes the fan back within 120 s.
+the driver's fan watchdog to 120 s. If the loop hangs, the watchdog hands the fan back to the
+EC within 120 s, except at level 7, which the driver keeps as its emergency level; if the
+service stops or dies, its unit hands it back at once.
 
 The loop uses about 46 ms of CPU per minute, less than 0.1% of one core.
 
