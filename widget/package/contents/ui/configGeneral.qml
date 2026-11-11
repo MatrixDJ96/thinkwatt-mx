@@ -194,9 +194,6 @@ KCM.SimpleKCM {
                     textFromValue: function (value) {
                         return i18n("%1 ms", value);
                     }
-                    valueFromText: function (text) {
-                        return parseInt(text);
-                    }
                 }
             }
 
