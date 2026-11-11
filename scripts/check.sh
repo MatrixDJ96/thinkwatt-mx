@@ -73,17 +73,27 @@ if [ "${1:-}" = --self-test ]; then
         printf 'FAIL: self-test, too_wide accepted a 101-column line\n' >&2
         exit 1
     fi
-    # The locale gate reads widget/po, so it runs on a copy: first as it is, then broken.
+    # The locale gate reads widget/, so it runs on a fresh copy: first as it is, then broken.
     cp -r widget "$copy/"
     if ! "$copy/widget/build-locale.sh" --check > /dev/null 2>&1; then
         printf 'FAIL: self-test, the locale gate refused the tree catalogues\n' >&2
         exit 1
     fi
-    printf 'msgid "a"\nmsgstr "b\n' >> "$copy/widget/po/it.po"
-    if "$copy/widget/build-locale.sh" --check > /dev/null 2>&1; then
-        printf 'FAIL: self-test, the locale gate accepted a broken catalogue\n' >&2
-        exit 1
-    fi
+    while IFS='|' read -r what file script; do
+        rm -rf "$copy/widget"
+        cp -r widget "$copy/"
+        sed -i "$script" "$copy/widget/$file"
+        if "$copy/widget/build-locale.sh" --check > /dev/null 2>&1; then
+            printf 'FAIL: self-test, the locale gate accepted %s\n' "$what" >&2
+            exit 1
+        fi
+    done << 'EOF'
+a broken catalogue|po/it.po|$a msgid "a"\nmsgstr "b
+a fuzzy entry|po/it.po|s/^msgid "inactive"$/#, fuzzy\n&/
+an obsolete entry|po/it.po|$a #~ msgid "a"\n#~ msgstr "b"
+a string missing from the catalogue|package/contents/ui/main.qml|$a i18n("Not in any catalogue")
+a string the QML dropped|package/contents/ui/main.qml|s/i18n("Update failed")/"Update failed"/
+EOF
     printf 'OK:   self-test, linters, the width guard and the locale gate refuse bad input\n'
     exit 0
 fi

@@ -5,10 +5,12 @@
 #
 # Usage: widget/build-locale.sh [--check | --compile]
 #   (no argument)  refresh the template from the QML, merge every catalogue, compile the .mo files
-#   --check        compile every catalogue to nowhere and require it to be well-formed
+#   --check        require every catalogue to compile, to hold the QML's strings and no others,
+#                  and no fuzzy or obsolete entry, rewriting no file
 #   --compile      compile the .mo files from the catalogues as they are, rewriting no tracked file
 #
-# Exit status: 0 every catalogue compiled, 1 one of them did not or a tool is missing.
+# Exit status: 0 every catalogue compiled (and passed --check), 1 one of them did not or a tool
+# is missing.
 
 set -euo pipefail
 
@@ -20,28 +22,45 @@ readonly ID=io.github.matrixdj96.thinkwattmx
 readonly DOMAIN=plasma_applet_$ID
 readonly TEMPLATE=$PO/$DOMAIN.pot
 
-for tool in xgettext msgmerge msgfmt; do
+for tool in xgettext msgmerge msgfmt msgcmp; do
     if ! command -v "$tool" > /dev/null; then
         printf 'FAIL: %s is not installed (gettext)\n' "$tool" >&2
         exit 1
     fi
 done
 
+# The KDE keyword set for i18n in QML, as develop.kde.org documents it.
+template() {
+    find "$PACKAGE/contents" -name '*.qml' | sort | xgettext --files-from=- --from-code=UTF-8 \
+        --language=JavaScript -C -kde -ci18n -ki18n:1 -ki18nc:1c,2 -ki18np:1,2 -ki18ncp:1c,2,3 \
+        --package-name="$DOMAIN" --no-location -o "$1"
+}
+
+# An empty msgstr is allowed: Italian keeps some English terms as they are.
 if [ "${1:-}" = --check ]; then
+    fresh=$(mktemp --suffix=.pot)
+    trap 'rm -f "$fresh"' EXIT
+    template "$fresh"
     for catalogue in "$PO"/*.po; do
         if ! msgfmt --check -o /dev/null "$catalogue"; then
             printf 'FAIL: %s does not compile\n' "$catalogue" >&2
+            exit 1
+        fi
+        if ! msgcmp --use-untranslated --use-fuzzy "$catalogue" "$fresh" 2> /dev/null \
+            || ! msgcmp --use-untranslated "$fresh" "$catalogue" 2> /dev/null; then
+            printf 'FAIL: %s does not match the QML: run widget/build-locale.sh\n' "$catalogue" >&2
+            exit 1
+        fi
+        if grep -n -e '^#, .*fuzzy' -e '^#~' "$catalogue" >&2; then
+            printf 'FAIL: %s has the fuzzy or obsolete entries above\n' "$catalogue" >&2
             exit 1
         fi
     done
     exit 0
 fi
 
-# The KDE keyword set for i18n in QML, as develop.kde.org documents it.
 if [ "${1:-}" != --compile ]; then
-    find "$PACKAGE/contents" -name '*.qml' | sort | xgettext --files-from=- --from-code=UTF-8 \
-        --language=JavaScript -C -kde -ci18n -ki18n:1 -ki18nc:1c,2 -ki18np:1,2 -ki18ncp:1c,2,3 \
-        --package-name="$DOMAIN" --no-location -o "$TEMPLATE"
+    template "$TEMPLATE"
 fi
 
 for catalogue in "$PO"/*.po; do
