@@ -19,7 +19,7 @@ The two numbers of `tp-bench-power` are the run length and the sampling interval
 
 Each bench first prints the profile, `Ceiling` and the limits it finds, and measures the
 machine in that state. `tp-bench-power` changes nothing. `tp-bench-soc` changes only the GPU's
-DPM level, and sets it back to `auto` when it exits.
+DPM level, and sets back the level it found when it exits.
 
 ## Before a run
 

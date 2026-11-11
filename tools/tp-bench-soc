@@ -8,12 +8,12 @@
 # — the point is what happens to the CPU clock when the GPU takes its share.
 # Exit status: 0 measured, 1 a prerequisite is missing or the seconds are not a number.
 #
-# It changes nothing but the GPU's DPM level, pinned high for the GPU legs and set back to auto
-# on exit: a light GL load leaves the driver at the lowest state, where the GPU draws nothing
-# and the contention never shows. Profile, ceiling and a clear desktop belong to whoever runs
-# it, and the state printed on top is what the numbers belong to; a firmware still in thermal
-# fallback shows there as the low STT limit under a performance profile. The limits are read
-# once, from the patched amd_pmf, for that header: every sample comes from sysfs.
+# It changes nothing but the GPU's DPM level, pinned high for the GPU legs and set back to the
+# level it found on exit: a light GL load leaves the driver at the lowest state, where the GPU
+# draws nothing and the contention never shows. Profile, ceiling and a clear desktop belong to
+# whoever runs it, and the state printed on top is what the numbers belong to; a firmware still
+# in thermal fallback shows there as the low STT limit under a performance profile. The limits
+# are read once, from the patched amd_pmf, for that header: every sample comes from sysfs.
 
 set -euo pipefail
 
@@ -33,12 +33,16 @@ readonly CARD
 gears_pid=""
 # A bare `wait` would also wait on glxgears, which never exits: the run deadlocks at the end.
 cpu_pid=""
+# The level found before pinning it high; empty until then.
+gpu_level=""
 
 cleanup() {
     if [ -n "$gears_pid" ]; then
         kill "$gears_pid" 2> /dev/null || true
     fi
-    printf 'auto\n' > "$CARD/power_dpm_force_performance_level"
+    if [ -n "$gpu_level" ]; then
+        printf '%s\n' "$gpu_level" > "$CARD/power_dpm_force_performance_level"
+    fi
 }
 
 require() {
@@ -132,6 +136,7 @@ snap '2 CPU only'
 wait "$cpu_pid"
 sleep 20
 
+gpu_level=$(cat "$CARD/power_dpm_force_performance_level")
 printf 'high\n' > "$CARD/power_dpm_force_performance_level"
 sudo -u "#$USER_UID" env XDG_RUNTIME_DIR="/run/user/$USER_UID" WAYLAND_DISPLAY=wayland-0 \
     DISPLAY=:0 vblank_mode=0 glxgears -geometry "$GEOMETRY" > /dev/null 2>&1 &
