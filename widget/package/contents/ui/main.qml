@@ -331,7 +331,7 @@ PlasmoidItem {
         case "profile":
             return ceilingOn ? "performance+" : profile;
         case "lapmode":
-            return !answered ? missing : clamped ? i18n("active, ceiling halved") : i18n("inactive");
+            return !answered ? missing : clamped ? i18n("active, firmware limits") : i18n("inactive");
         case "freq":
             return answered ? i18n("%1 GHz", number("freq", 2, 1000)) : missing;
         case "tctl":
@@ -533,7 +533,7 @@ PlasmoidItem {
 
     Plasmoid.status: clamped ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
     toolTipMainText: i18n("ThinkWatt MX")
-    toolTipSubText: clamped ? i18n("Lap mode active: the ceiling is halved")
+    toolTipSubText: clamped ? i18n("Lap mode active: the firmware limits apply")
         : offered ? i18n("New version available") : stale ? i18n("Service out of date")
         : driversMissing ? i18n("Update needed") : ""
 

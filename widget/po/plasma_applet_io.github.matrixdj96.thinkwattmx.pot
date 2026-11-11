@@ -175,7 +175,7 @@ msgstr ""
 msgid "%1 rpm %2"
 msgstr ""
 
-msgid "active, ceiling halved"
+msgid "active, firmware limits"
 msgstr ""
 
 msgid "inactive"
@@ -190,7 +190,7 @@ msgstr ""
 msgid "ThinkWatt MX"
 msgstr ""
 
-msgid "Lap mode active: the ceiling is halved"
+msgid "Lap mode active: the firmware limits apply"
 msgstr ""
 
 msgid "New version available"

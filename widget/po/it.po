@@ -173,8 +173,8 @@ msgstr ""
 msgid "%1 rpm %2"
 msgstr ""
 
-msgid "active, ceiling halved"
-msgstr "attiva, tetto dimezzato"
+msgid "active, firmware limits"
+msgstr "attiva, limiti del firmware"
 
 msgid "inactive"
 msgstr "inattiva"
@@ -188,8 +188,8 @@ msgstr ""
 msgid "ThinkWatt MX"
 msgstr ""
 
-msgid "Lap mode active: the ceiling is halved"
-msgstr "Lap mode attiva: il tetto è dimezzato"
+msgid "Lap mode active: the firmware limits apply"
+msgstr "Lap mode attiva: valgono i limiti del firmware"
 
 msgid "New version available"
 msgstr "Nuova versione disponibile"
