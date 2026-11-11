@@ -44,6 +44,7 @@ the design, so the same mistake is not made twice.
 | `thinkpad_acpi` keeps `fan_control=1` across a reload                       | `insmod` takes only its own arguments; `swap.sh` passes the options `modprobe -c` lists                 |
 | units can run code from the clone                                           | the user can write the clone; the service and drivers are copied where only root writes                 |
 | `kquitapp6` + `setsid plasmashell` restores the shell as the session ran it | it left the shell outside `plasma-plasmashell.service`, where a crash is not restarted                  |
+| `kquitapp6` quits the shell before the installer starts it again            | the shell hung while quitting, so the start found the unit active; the installer now stops the unit     |
 
 ## Applet
 

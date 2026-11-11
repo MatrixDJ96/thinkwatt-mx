@@ -183,8 +183,12 @@ write_applet_order() {
 }
 
 # The session runs the shell as plasma-plasmashell.service; started any other way it leaves the
-# unit, whose Restart=on-failure then no longer covers it. kquitapp6 quits it cleanly, which
-# that restart policy ignores, so a quit and a start are all a restart needs.
+# unit, whose Restart=on-failure then no longer covers it. A stop through the unit waits for the
+# shell to quit, and ends one that hangs while quitting.
+stop_plasmashell() {
+    systemctl --user stop plasma-plasmashell.service
+}
+
 start_plasmashell() {
     systemctl --user start plasma-plasmashell.service
 }
@@ -196,8 +200,7 @@ applet_installed() {
 remove_applet() {
     local containment=$1 number order
     number=$(applet_number "$containment")
-    kquitapp6 plasmashell 2> /dev/null || true
-    sleep 3
+    stop_plasmashell
     if [ -n "$number" ]; then
         order=$(applet_order "$containment" | tr ';' '\n' | grep -vxF "$number" | paste -sd';' - \
             || true)
@@ -228,8 +231,7 @@ install_applet() {
     if [ -z "$number" ]; then
         fail "the panel did not accept $APPLET_ID"
     fi
-    kquitapp6 plasmashell 2> /dev/null || true
-    sleep 3
+    stop_plasmashell
     if [ "$placed" = no ]; then
         # First placement: straight after the tray. plasmashell appended the number, so it moves.
         order=$(applet_order "$containment" | tr ';' '\n' | grep -vxF "$number" \
