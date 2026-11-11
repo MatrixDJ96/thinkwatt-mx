@@ -4,8 +4,8 @@ ThinkWatt MX patches two in-tree drivers. The service writes the skin target and
 through the sysfs attributes these patches add, so the skin target reaches the SMU through
 `amd_pmf`, the driver the firmware expects ([`smu.md`](smu.md)).
 
-- `kmods/patches/amd-pmf-stt-override.patch` adds four attributes to `amd_pmf`:
-  `stt_skin_temp_apu`, `power_limits`, `metrics` and `stt_tables`.
+- `kmods/patches/<series>/amd-pmf-stt-override.patch`, one per kernel series, adds four
+  attributes to `amd_pmf`: `stt_skin_temp_apu`, `power_limits`, `metrics` and `stt_tables`.
 - `kmods/patches/thinkpad_acpi-lapmode-store.patch` makes `dytc_lapmode` of `thinkpad_acpi`
   writable.
 
@@ -57,11 +57,13 @@ touch either driver, so the stable sources are the sources the kernel runs.
 `kmods/build.sh [release]` builds both modules for the running kernel, or for the release
 given. It needs the kernel headers and the network:
 
-1. It downloads each driver's files from the stable tag, for example `v7.2.3` for
+1. It stops if `kmods/patches/` has no folder for the release's series, such as `7.4`.
+2. It downloads OGC's `monolithic.patch` for that release and stops if it touches either
+   driver's files.
+3. It downloads each driver's files from the stable tag, for example `v7.2.3` for
    `7.2.3-ogc3.1.fc44.x86_64`.
-2. It stops if OGC's `monolithic.patch` for that release touches them.
-3. It applies `kmods/patches/*.patch` with `git apply`.
-4. It compiles against `/lib/modules/<release>/build` into `kmods/<release>/`.
+4. It applies `kmods/patches/*.patch` and those of the series folder with `git apply`.
+5. It compiles against `/lib/modules/<release>/build` into `kmods/<release>/`.
 
 ## Loading
 

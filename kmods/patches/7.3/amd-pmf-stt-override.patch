@@ -1,0 +1,369 @@
+SPDX-License-Identifier: GPL-2.0-only
+
+--- a/drivers/platform/x86/amd/pmf/core.c
++++ b/drivers/platform/x86/amd/pmf/core.c
+@@ -98,6 +98,8 @@ static int amd_pmf_pwr_src_notify_call(struct notifier_block *nb, unsigned long
+ 	if (is_apmf_func_supported(pmf, APMF_FUNC_OS_POWER_SLIDER_UPDATE))
+ 		amd_pmf_power_slider_update_event(pmf);
+ 
++	amd_pmf_apply_stt_override(pmf);
++
+ 	return NOTIFY_OK;
+ }
+ 
+@@ -550,6 +552,7 @@ static int amd_pmf_probe(struct platform_device *pdev)
+ 	platform_set_drvdata(pdev, dev);
+ 	amd_pmf_dbgfs_register(dev);
+ 	amd_pmf_init_features(dev);
++	amd_pmf_init_stt_tables(dev);
+ 	apmf_install_handler(dev);
+ 	if (is_apmf_func_supported(dev, APMF_FUNC_SBIOS_HEARTBEAT_V2))
+ 		amd_pmf_notify_sbios_heartbeat_event_v2(dev, ON_LOAD);
+@@ -570,6 +573,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
+ 	struct amd_pmf_dev *dev = platform_get_drvdata(pdev);
+ 
+ 	amd_pmf_cdev_unregister();
++	amd_pmf_deinit_stt_tables(dev);
+ 	amd_pmf_deinit_features(dev);
+ 	if (is_apmf_func_supported(dev, APMF_FUNC_SBIOS_HEARTBEAT_V2))
+ 		amd_pmf_notify_sbios_heartbeat_event_v2(dev, ON_UNLOAD);
+@@ -579,6 +583,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
+ 
+ static const struct attribute_group *amd_pmf_driver_groups[] = {
+ 	&cnqf_feature_attribute_group,
++	&sps_override_attribute_group,
+ 	NULL,
+ };
+ 
+@@ -597,3 +602,4 @@ module_platform_driver(amd_pmf_driver);
+ MODULE_LICENSE("GPL");
+ MODULE_DESCRIPTION("AMD Platform Management Framework Driver");
+ MODULE_SOFTDEP("pre: amdtee");
++MODULE_VERSION("thinkwatt-mx");
+--- a/drivers/platform/x86/amd/pmf/pmf.h
++++ b/drivers/platform/x86/amd/pmf/pmf.h
+@@ -17,6 +17,7 @@
+ #include <linux/compiler_attributes.h>
+ #include <linux/compiler_types.h>
+ #include <linux/input.h>
++#include <linux/kprobes.h>
+ #include <linux/mutex_types.h>
+ #include <linux/platform_device.h>
+ #include <linux/platform_profile.h>
+@@ -627,6 +628,15 @@ struct amd_pmf_dev {
+ 	struct mutex lock; /* protects the PMF interface */
+ 	u32 supported_func;
+ 	enum platform_profile_option current_profile;
++	u32 stt_apu_override; /* skin-temperature target in degrees C, 0 for the BIOS table */
++	u32 stt_apu_table; /* the target the SMU held before the override, Q8.8, 0 if unread */
++	acpi_handle stt_dstt; /* the DSDT method that sends a BIOS STT table, NULL if unwatched */
++	void *stt_dstt_desc; /* its method object, learnt when it first runs */
++	struct kprobe stt_begin_probe;
++	struct kprobe stt_end_probe;
++	struct work_struct stt_table_work;
++	u32 stt_tables; /* BIOS STT tables sent since load */
++	bool stt_table_fresh; /* a BIOS table landed since the override was last sent */
+ 	struct device *ppdev; /* platform profile class device */
+ 	struct dentry *dbgfs_dir;
+ 	int hb_interval; /* SBIOS heartbeat interval */
+@@ -1128,6 +1138,10 @@ int amd_pmf_init_cnqf(struct amd_pmf_dev *dev);
+ void amd_pmf_deinit_cnqf(struct amd_pmf_dev *dev);
+ int amd_pmf_trans_cnqf(struct amd_pmf_dev *dev, int socket_power, ktime_t time_lapsed_ms);
+ extern const struct attribute_group cnqf_feature_attribute_group;
++extern const struct attribute_group sps_override_attribute_group;
++void amd_pmf_apply_stt_override(struct amd_pmf_dev *pmf);
++void amd_pmf_init_stt_tables(struct amd_pmf_dev *pmf);
++void amd_pmf_deinit_stt_tables(struct amd_pmf_dev *pmf);
+ 
+ /* Smart PC builder Layer */
+ int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev);
+--- a/drivers/platform/x86/amd/pmf/sps.c
++++ b/drivers/platform/x86/amd/pmf/sps.c
+@@ -198,7 +198,8 @@ static void amd_pmf_update_slider_v2(struct amd_pmf_dev *dev, int idx)
+ 	amd_pmf_send_cmd(dev, SET_STT_MIN_LIMIT, SET_CMD,
+ 			 apts_config_store.val[idx].stt_min_limit, NULL);
+ 	amd_pmf_send_cmd(dev, SET_STT_LIMIT_APU, SET_CMD,
+-			 fixp_q88_fromint(apts_config_store.val[idx].stt_skin_temp_limit_apu),
++			 fixp_q88_fromint(dev->stt_apu_override ?:
++					  apts_config_store.val[idx].stt_skin_temp_limit_apu),
+ 			 NULL);
+ 	amd_pmf_send_cmd(dev, SET_STT_LIMIT_HS2, SET_CMD,
+ 			 fixp_q88_fromint(apts_config_store.val[idx].stt_skin_temp_limit_hs2),
+@@ -219,7 +220,8 @@ void amd_pmf_update_slider(struct amd_pmf_dev *dev, bool op, int idx,
+ 		amd_pmf_send_cmd(dev, SET_STT_MIN_LIMIT, SET_CMD,
+ 				 config_store.prop[src][idx].stt_min, NULL);
+ 		amd_pmf_send_cmd(dev, SET_STT_LIMIT_APU, SET_CMD,
+-				 fixp_q88_fromint(config_store.prop[src][idx].stt_skin_temp[STT_TEMP_APU]),
++				 fixp_q88_fromint(dev->stt_apu_override ?:
++						  config_store.prop[src][idx].stt_skin_temp[STT_TEMP_APU]),
+ 				 NULL);
+ 		amd_pmf_send_cmd(dev, SET_STT_LIMIT_HS2, SET_CMD,
+ 				 fixp_q88_fromint(config_store.prop[src][idx].stt_skin_temp[STT_TEMP_HS2]),
+@@ -286,6 +288,258 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
+ 	return pmf->current_profile == PLATFORM_PROFILE_BALANCED;
+ }
+ 
++/*
++ * Sends the override, if one is set, on the PMF mailbox. A BIOS table that
++ * landed since the last send holds the SMU's target now: on the V1 interface
++ * its value is read first, so that 0 puts back the latest table's target.
++ */
++void amd_pmf_apply_stt_override(struct amd_pmf_dev *pmf)
++{
++	if (!pmf->stt_apu_override)
++		return;
++	if (pmf->pmf_if_version == PMF_IF_V1 && READ_ONCE(pmf->stt_table_fresh)) {
++		WRITE_ONCE(pmf->stt_table_fresh, false);
++		amd_pmf_send_cmd(pmf, GET_STT_LIMIT_APU, GET_CMD, ARG_NONE, &pmf->stt_apu_table);
++	}
++	amd_pmf_send_cmd(pmf, SET_STT_LIMIT_APU, SET_CMD,
++			 fixp_q88_fromint(pmf->stt_apu_override), NULL);
++}
++
++/*
++ * The skin-temperature target the SMU holds the APU to, in degrees C. The BIOS
++ * table gives one per profile and power source, pushed by the static slider
++ * where the platform has it or by the SBIOS on the OS power slider update.
++ * A non-zero value here is sent at once and again after every such push the
++ * driver makes; 0 stops that and puts the table back at once: the static
++ * slider's own value where the platform has one, otherwise the target of the
++ * latest BIOS table, read from the SMU before the override went over it, since
++ * the SBIOS does not push its table again for a slider position that has not
++ * moved.
++ */
++static ssize_t stt_skin_temp_apu_show(struct device *dev,
++				      struct device_attribute *attr, char *buf)
++{
++	struct amd_pmf_dev *pdev = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%u\n", pdev->stt_apu_override);
++}
++
++static ssize_t stt_skin_temp_apu_store(struct device *dev,
++				       struct device_attribute *attr,
++				       const char *buf, size_t count)
++{
++	struct amd_pmf_dev *pdev = dev_get_drvdata(dev);
++	u32 val;
++	int err;
++
++	err = kstrtou32(buf, 10, &val);
++	if (err)
++		return err;
++	if (val > U8_MAX)
++		return -EINVAL;
++
++	if (val && !pdev->stt_apu_override && pdev->pmf_if_version == PMF_IF_V1) {
++		err = amd_pmf_send_cmd(pdev, GET_STT_LIMIT_APU, GET_CMD, ARG_NONE,
++				       &pdev->stt_apu_table);
++		if (err)
++			return err;
++	}
++	pdev->stt_apu_override = val;
++	if (val) {
++		amd_pmf_apply_stt_override(pdev);
++		return count;
++	}
++	if (is_apmf_func_supported(pdev, APMF_FUNC_STATIC_SLIDER_GRANULAR)) {
++		err = amd_pmf_set_sps_power_limits(pdev);
++		if (err)
++			return err;
++	} else if (pdev->stt_apu_table) {
++		err = amd_pmf_send_cmd(pdev, SET_STT_LIMIT_APU, SET_CMD, pdev->stt_apu_table,
++				       NULL);
++		if (err)
++			return err;
++	}
++	pdev->stt_apu_table = 0;
++
++	return count;
++}
++static DEVICE_ATTR_RW(stt_skin_temp_apu);
++
++/*
++ * The limits the SMU holds now, read back through the same mailbox: the power
++ * limits in mW, the two skin-temperature targets in degrees C.
++ */
++static ssize_t power_limits_show(struct device *dev,
++				 struct device_attribute *attr, char *buf)
++{
++	struct amd_pmf_dev *pdev = dev_get_drvdata(dev);
++	u32 val[7] = {};
++	static const u8 cmd[7] = { GET_SPL, GET_FPPT, GET_SPPT, GET_SPPT_APU_ONLY,
++				   GET_STT_MIN_LIMIT, GET_STT_LIMIT_APU, GET_STT_LIMIT_HS2 };
++	int i, err;
++
++	for (i = 0; i < ARRAY_SIZE(cmd); i++) {
++		err = amd_pmf_send_cmd(pdev, cmd[i], GET_CMD, ARG_NONE, &val[i]);
++		if (err)
++			return err;
++	}
++
++	return sysfs_emit(buf,
++			  "spl=%u fppt=%u sppt=%u sppt_apu_only=%u stt_min=%u stt_apu=%u.%02u stt_hs2=%u.%02u\n",
++			  val[0], val[1], val[2], val[3], val[4],
++			  val[5] >> 8, (val[5] & 0xff) * 100 / 256,
++			  val[6] >> 8, (val[6] & 0xff) * 100 / 256);
++}
++static DEVICE_ATTR_RO(power_limits);
++
++/*
++ * The metrics table the SMU fills on request: the temperatures in degrees C,
++ * the powers in mW, the STAPM limit in W, and the SMU's own counter, which
++ * the reference machine's firmware leaves at 0. One transfer per read, on the
++ * driver's mailbox, into the buffer the driver registers with the SMU on the
++ * first read; the layout is the V1 table, so the attribute exists only there.
++ */
++static ssize_t metrics_show(struct device *dev,
++			    struct device_attribute *attr, char *buf)
++{
++	struct amd_pmf_dev *pdev = dev_get_drvdata(dev);
++	struct smu_pmf_metrics *m = &pdev->m_table;
++	u16 core_temp = 0;
++	int i, err;
++
++	guard(mutex)(&pdev->update_mutex);
++	if (!pdev->buf) {
++		err = amd_pmf_set_dram_addr(pdev, true);
++		if (err)
++			return err;
++	}
++	memset(pdev->buf, 0, sizeof(*m));
++	err = amd_pmf_send_cmd(pdev, SET_TRANSFER_TABLE, SET_CMD, METRICS_TABLE_ID, NULL);
++	if (err)
++		return err;
++	memcpy(m, pdev->buf, sizeof(*m));
++	for (i = 0; i < ARRAY_SIZE(m->core_temp); i++)
++		core_temp = max(core_temp, m->core_temp[i]);
++
++	return sysfs_emit(buf,
++			  "skin_temp=%u.%02u core_temp=%u.%02u gfx_temp=%u.%02u soc_temp=%u.%02u apu_power=%u socket_power=%u avg_socket_power=%u stapm_limit=%u counter=%u\n",
++			  m->skin_temp / 100, m->skin_temp % 100,
++			  core_temp / 100, core_temp % 100,
++			  m->gfx_temp / 100, m->gfx_temp % 100,
++			  m->soc_temp / 100, m->soc_temp % 100,
++			  m->apu_power, m->current_socketpower, m->avg_socket_power,
++			  m->stapm_cur_limit, m->metrics_counter);
++}
++static DEVICE_ATTR_RO(metrics);
++
++/* The DSDT method that sends one BIOS STT table to the SMU through ALIB. */
++#define STT_TABLE_METHOD "\\_SB.PCI0.LPC0.EC0.HKEY.DSTT"
++
++/* DSTT's method object is its node's own: the end of a run is its pointer. */
++static int amd_pmf_stt_begin(struct kprobe *p, struct pt_regs *regs)
++{
++	struct amd_pmf_dev *pmf = container_of(p, struct amd_pmf_dev, stt_begin_probe);
++
++	if ((acpi_handle)regs_get_kernel_argument(regs, 0) == pmf->stt_dstt)
++		WRITE_ONCE(pmf->stt_dstt_desc, (void *)regs_get_kernel_argument(regs, 1));
++	return 0;
++}
++
++static int amd_pmf_stt_end(struct kprobe *p, struct pt_regs *regs)
++{
++	struct amd_pmf_dev *pmf = container_of(p, struct amd_pmf_dev, stt_end_probe);
++	void *desc = READ_ONCE(pmf->stt_dstt_desc);
++
++	if (desc && (void *)regs_get_kernel_argument(regs, 0) == desc) {
++		WRITE_ONCE(pmf->stt_tables, pmf->stt_tables + 1);
++		WRITE_ONCE(pmf->stt_table_fresh, true);
++		schedule_work(&pmf->stt_table_work);
++	}
++	return 0;
++}
++
++/* sysfs_notify sleeps, and the probes run in the interpreter with preemption off. */
++static void amd_pmf_stt_table_notify(struct work_struct *work)
++{
++	struct amd_pmf_dev *pmf = container_of(work, struct amd_pmf_dev, stt_table_work);
++
++	sysfs_notify(&pmf->dev->kobj, NULL, "stt_tables");
++}
++
++/*
++ * _Q3E, _Q40, _Q4B and DYTC send the BIOS STT tables through DSTT, and no
++ * Notify marks one. Two probes on the AML interpreter see each run of DSTT
++ * begin and end; at the end, with the table in the SMU, stt_tables counts one
++ * and notifies its readers.
++ */
++void amd_pmf_init_stt_tables(struct amd_pmf_dev *pmf)
++{
++	struct kprobe *probes[] = { &pmf->stt_begin_probe, &pmf->stt_end_probe };
++	int err;
++
++	if (ACPI_FAILURE(acpi_get_handle(NULL, STT_TABLE_METHOD, &pmf->stt_dstt)))
++		return;
++	INIT_WORK(&pmf->stt_table_work, amd_pmf_stt_table_notify);
++	pmf->stt_begin_probe.symbol_name = "acpi_ds_begin_method_execution";
++	pmf->stt_begin_probe.pre_handler = amd_pmf_stt_begin;
++	pmf->stt_end_probe.symbol_name = "acpi_ds_terminate_control_method";
++	pmf->stt_end_probe.pre_handler = amd_pmf_stt_end;
++	err = register_kprobes(probes, ARRAY_SIZE(probes));
++	if (err) {
++		dev_warn(pmf->dev, "STT tables unwatched: kprobe error %d\n", err);
++		pmf->stt_dstt = NULL;
++	}
++}
++
++void amd_pmf_deinit_stt_tables(struct amd_pmf_dev *pmf)
++{
++	struct kprobe *probes[] = { &pmf->stt_begin_probe, &pmf->stt_end_probe };
++
++	if (!pmf->stt_dstt)
++		return;
++	unregister_kprobes(probes, ARRAY_SIZE(probes));
++	cancel_work_sync(&pmf->stt_table_work);
++}
++
++/* The BIOS STT tables sent since the driver loaded; each one is notified. */
++static ssize_t stt_tables_show(struct device *dev,
++			       struct device_attribute *attr, char *buf)
++{
++	struct amd_pmf_dev *pdev = dev_get_drvdata(dev);
++
++	return sysfs_emit(buf, "%u\n", READ_ONCE(pdev->stt_tables));
++}
++static DEVICE_ATTR_RO(stt_tables);
++
++static umode_t sps_override_is_visible(struct kobject *kobj,
++				       struct attribute *attr, int n)
++{
++	struct amd_pmf_dev *pdev = dev_get_drvdata(kobj_to_dev(kobj));
++
++	if (!is_apmf_func_supported(pdev, APMF_FUNC_STATIC_SLIDER_GRANULAR) &&
++	    !is_apmf_func_supported(pdev, APMF_FUNC_OS_POWER_SLIDER_UPDATE))
++		return 0;
++	/* The GET commands and the V1 metrics table exist on the V1 interface only. */
++	if ((attr == &dev_attr_power_limits.attr || attr == &dev_attr_metrics.attr) &&
++	    pdev->pmf_if_version != PMF_IF_V1)
++		return 0;
++
++	return attr->mode;
++}
++
++static struct attribute *sps_override_attrs[] = {
++	&dev_attr_stt_skin_temp_apu.attr,
++	&dev_attr_power_limits.attr,
++	&dev_attr_metrics.attr,
++	&dev_attr_stt_tables.attr,
++	NULL
++};
++
++const struct attribute_group sps_override_attribute_group = {
++	.is_visible = sps_override_is_visible,
++	.attrs = sps_override_attrs,
++};
++
+ static int amd_pmf_profile_get(struct device *dev,
+ 			       enum platform_profile_option *profile)
+ {
+@@ -390,6 +644,8 @@ static int amd_pmf_profile_set(struct device *dev,
+ 			return ret;
+ 	}
+ 
++	amd_pmf_apply_stt_override(pmf);
++
+ 	return 0;
+ }
+ 

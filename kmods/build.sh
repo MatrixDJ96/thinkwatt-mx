@@ -5,7 +5,8 @@
 #   kernel-release  defaults to the running kernel, an OGC release like 7.2.3-ogc3.1.fc44.x86_64
 #
 # Exit status: 0 the modules are in kmods/<release>/, 1 the headers are missing, a source is
-# unreachable, the OGC monolithic patch touches a driver, or a patch of ours no longer applies.
+# unreachable, the OGC monolithic patch touches a driver, the kernel series has no patches of
+# ours, a patch no longer applies, or a driver does not build.
 #
 # The OGC kernel is kernel.org's stable release plus OGC's signed monolithic.patch
 # (docs/kernel.md), so each driver's sources are fetched from the stable tag and the monolithic
@@ -28,6 +29,8 @@ readonly OGC=https://github.com/OpenGamingCollective/linux/releases/download
 readonly STABLE_TAG=v${RELEASE%%-*}
 OGC_TAG=v$(printf '%s' "$RELEASE" | sed -E 's/^([0-9.]+-ogc[0-9]+).*/\1/')
 readonly OGC_TAG
+SERIES=$(printf '%s' "${STABLE_TAG#v}" | cut -d. -f1,2)
+readonly SERIES
 
 # driver -> module object; the sources per driver follow the kernel's own Makefile.
 declare -A OBJECTS=(
@@ -42,7 +45,13 @@ declare -A SOURCES=(
     [thinkpad_acpi]="thinkpad_acpi.c drivers/platform/x86/dual_accel_detect.h"
     [amd_pmf]="core.c acpi.c sps.c auto-mode.c cnqf.c tee-if.c spc.c pmf.h"
 )
-readonly AMD_PMF_OBJECTS="core.o acpi.o sps.o auto-mode.o cnqf.o tee-if.o spc.o"
+AMD_PMF_OBJECTS="core.o acpi.o sps.o auto-mode.o cnqf.o tee-if.o spc.o"
+# 7.3 moved the metrics code out of core.c.
+if [ "$SERIES" != 7.2 ]; then
+    SOURCES[amd_pmf]+=" metrics.c"
+    AMD_PMF_OBJECTS+=" metrics.o"
+fi
+readonly AMD_PMF_OBJECTS
 
 fail() {
     printf 'FAIL: %s\n' "$1" >&2
@@ -69,6 +78,9 @@ source_paths() {
     done
 }
 
+if [ ! -d "$HERE/patches/$SERIES" ]; then
+    fail "no patches for kernel $SERIES in kmods/patches/"
+fi
 if [ ! -d "$KDIR" ]; then
     fail "kernel headers are missing in $KDIR"
 fi
@@ -90,7 +102,7 @@ for driver in "${!OBJECTS[@]}"; do
 done
 
 # git applies a patch outside a repository like patch(1) would; the image ships no patch(1).
-for patch in "$HERE"/patches/*.patch; do
+for patch in "$HERE"/patches/*.patch "$HERE/patches/$SERIES"/*.patch; do
     if ! git -C "$stage" apply -p1 "$patch"; then
         fail "$(basename "$patch") no longer applies to $STABLE_TAG"
     fi

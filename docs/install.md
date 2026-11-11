@@ -6,7 +6,7 @@
 | -------------------------------- | ----------------------------------------------------------- |
 | ThinkPad L14 Gen 6 AMD           | the only tested model                                       |
 | Fedora Atomic, SELinux enforcing | the installer is written for it                             |
-| OGC kernel and its headers       | the driver build targets its sources                        |
+| OGC kernel 7.2 or 7.3, headers   | the driver build targets its sources                        |
 | `tuned-ppd`                      | the profile daemon the service works with                   |
 | KDE Plasma 6                     | the applet and its placement in the panel                   |
 | Secure Boot disabled             | the patched drivers are not signed                          |
@@ -18,6 +18,7 @@ On other systems the build or the installer stops at a known point:
 | system                    | what happens                                               |
 | ------------------------- | ---------------------------------------------------------- |
 | a kernel other than OGC   | `kmods/build.sh` fails                                     |
+| OGC other than 7.2, 7.3   | `kmods/build.sh` fails                                     |
 | `power-profiles-daemon`   | untested                                                   |
 | no SELinux                | `scripts/install.sh` fails at `semanage`                   |
 | no `qdbus-qt6`            | `scripts/install.sh` fails when it first places the applet |
@@ -58,8 +59,9 @@ button runs `thinkwatt-mx-update.service`: it clones the release and builds the 
 running kernel. A new release is then installed by its own `scripts/install.sh`, which restarts
 `plasmashell`, and the drivers that changed are reloaded. The service keeps its state: a
 stopped service stays stopped, and the ceiling and the fan level in force are written back. A
-new kernel only gets its drivers, next to those of the other kernels, and the service starts.
-Its log is `journalctl -u thinkwatt-mx-update`.
+new kernel only gets its drivers, next to those of the other kernels, and the service starts. A
+new release keeps the running kernel's drivers alone: on another kernel, the button builds them
+again. Its log is `journalctl -u thinkwatt-mx-update`.
 
 The popup's title shows the applet's version. When the running service is at another version,
 as after an install from the clone without the restart below, the panel shows the update icon
@@ -68,7 +70,8 @@ and the fan level.
 
 A new kernel boots with both units skipped and the stock drivers loaded, since no drivers are
 built for it yet: for an install made from a release, the applet's button builds them;
-otherwise run the commands below.
+otherwise run the commands below. A kernel series with no folder in `kmods/patches/`, such as
+7.4, waits for a release that adds one.
 
 Only a newer release is offered. To install another version, or a commit of your own, check it
 out in the clone and install from there:
