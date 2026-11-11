@@ -78,9 +78,9 @@ Every property write is checked against the polkit action
 | no active session (`sudo -u nobody`) | `Error.NotAuthorized`  |
 
 The bus policy in `policy/` lets only root own the name and anyone send to it. The rule also
-lets an active `wheel` user start, stop and restart `thinkwatt-mx.service`, which is how the
-applet's service button works, and restart `thinkwatt-mx-kmods.service`, which restarts the
-service with it.
+lets an active `wheel` user start and stop `thinkwatt-mx.service`, which is how the applet's
+service button works, restart `thinkwatt-mx-kmods.service`, which restarts the service with it,
+and start `thinkwatt-mx-update.service`, which is how the applet's update button works.
 
 ## Events
 
