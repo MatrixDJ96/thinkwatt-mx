@@ -4,8 +4,9 @@ ThinkWatt MX patches two in-tree drivers. The service writes the skin target and
 through the sysfs attributes these patches add, so the skin target reaches the SMU through
 `amd_pmf`, the driver the firmware expects ([`smu.md`](smu.md)).
 
-- `kmods/patches/<series>/amd-pmf-stt-override.patch`, one per kernel series, adds four
-  attributes to `amd_pmf`: `stt_skin_temp_apu`, `power_limits`, `metrics` and `stt_tables`.
+- `kmods/patches/<series>/amd-pmf-stt-override.patch`, one per kernel series, adds five
+  attributes to `amd_pmf`: `stt_skin_temp_apu`, `power_limits`, `metrics`, `stt_tables` and
+  `fn_key`, and takes Fn+H, Fn+M and Fn+L from the firmware.
 - `kmods/patches/thinkpad_acpi-lapmode-store.patch` makes `dytc_lapmode` of `thinkpad_acpi`
   writable.
 
@@ -16,7 +17,7 @@ itself, with the mailbox command `SET_STT_LIMIT_APU`. This BIOS declares the OS 
 instead. There the driver only notifies the BIOS of profile and power-source changes, and the
 DSDT sends the table.
 
-The patch adds four attributes to `/sys/bus/platform/devices/AMDI0102:00/`:
+The patch adds five attributes to `/sys/bus/platform/devices/AMDI0102:00/`:
 
 | attribute           | access | content                                                                             |
 | ------------------- | ------ | ----------------------------------------------------------------------------------- |
@@ -24,6 +25,7 @@ The patch adds four attributes to `/sys/bus/platform/devices/AMDI0102:00/`:
 | `power_limits`      | ro     | `spl`, `fppt`, `sppt`, `sppt_apu_only`, `stt_min` in mW; `stt_apu`, `stt_hs2` in °C |
 | `metrics`           | ro     | skin, core, GPU and SoC temperatures; APU and socket power; STAPM limit             |
 | `stt_tables`        | ro     | BIOS STT tables sent since the driver loaded; each one notifies the file's readers  |
+| `fn_key`            | ro     | Fn key presses since the driver loaded and the last key, `H`, `M` or `L`; notified  |
 
 A non-zero write to `stt_skin_temp_apu` is sent to the SMU at once. The driver sends it again
 after its own notification to the BIOS on every profile and power-source change, so the table
@@ -36,6 +38,15 @@ interpreter, on `acpi_ds_begin_method_execution` and `acpi_ds_terminate_control_
 each run of `\_SB.PCI0.LPC0.EC0.HKEY.DSTT` start and end. At the end the table is in the SMU:
 `stt_tables` counts one and notifies its readers, and inotify sees the change. The probes
 compare two pointers and touch no mailbox.
+
+Fn+H, Fn+M and Fn+L raise EC queries `0x6D`, `0x6E` and `0x6F`, whose DSDT methods send the
+same table whatever the key ([`envelope.md`](envelope.md#the-firmware-tables)). The patch adds
+its own handler for each with `acpi_ec_add_query_handler`, which the EC finds before the
+DSDT's, so the firmware no longer runs them: `fn_key` counts the key and notifies its readers,
+and the service asks for the profile. Unloading the driver hands the keys back to the firmware.
+The two EC functions live in `drivers/acpi/internal.h`, which an out-of-tree module does not
+see: the patch declares them itself, so a change to their signature in a later kernel would
+build and misbehave at run time.
 
 Writing `0` puts back the BIOS table's target. On the V1 interface it is the target of the
 latest BIOS table the override went over: before the driver sends the override over a table

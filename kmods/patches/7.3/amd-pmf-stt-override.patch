@@ -11,23 +11,25 @@ SPDX-License-Identifier: GPL-2.0-only
  	return NOTIFY_OK;
  }
  
-@@ -550,6 +552,7 @@ static int amd_pmf_probe(struct platform_device *pdev)
+@@ -550,6 +552,8 @@ static int amd_pmf_probe(struct platform_device *pdev)
  	platform_set_drvdata(pdev, dev);
  	amd_pmf_dbgfs_register(dev);
  	amd_pmf_init_features(dev);
 +	amd_pmf_init_stt_tables(dev);
++	amd_pmf_init_fn_keys(dev);
  	apmf_install_handler(dev);
  	if (is_apmf_func_supported(dev, APMF_FUNC_SBIOS_HEARTBEAT_V2))
  		amd_pmf_notify_sbios_heartbeat_event_v2(dev, ON_LOAD);
-@@ -570,6 +573,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
+@@ -570,6 +574,8 @@ static void amd_pmf_remove(struct platform_device *pdev)
  	struct amd_pmf_dev *dev = platform_get_drvdata(pdev);
  
  	amd_pmf_cdev_unregister();
++	amd_pmf_deinit_fn_keys(dev);
 +	amd_pmf_deinit_stt_tables(dev);
  	amd_pmf_deinit_features(dev);
  	if (is_apmf_func_supported(dev, APMF_FUNC_SBIOS_HEARTBEAT_V2))
  		amd_pmf_notify_sbios_heartbeat_event_v2(dev, ON_UNLOAD);
-@@ -579,6 +583,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
+@@ -579,6 +585,7 @@ static void amd_pmf_remove(struct platform_device *pdev)
  
  static const struct attribute_group *amd_pmf_driver_groups[] = {
  	&cnqf_feature_attribute_group,
@@ -35,7 +37,7 @@ SPDX-License-Identifier: GPL-2.0-only
  	NULL,
  };
  
-@@ -597,3 +602,4 @@ module_platform_driver(amd_pmf_driver);
+@@ -597,3 +604,4 @@ module_platform_driver(amd_pmf_driver);
  MODULE_LICENSE("GPL");
  MODULE_DESCRIPTION("AMD Platform Management Framework Driver");
  MODULE_SOFTDEP("pre: amdtee");
@@ -50,7 +52,7 @@ SPDX-License-Identifier: GPL-2.0-only
  #include <linux/mutex_types.h>
  #include <linux/platform_device.h>
  #include <linux/platform_profile.h>
-@@ -627,6 +628,15 @@ struct amd_pmf_dev {
+@@ -627,6 +628,20 @@ struct amd_pmf_dev {
  	struct mutex lock; /* protects the PMF interface */
  	u32 supported_func;
  	enum platform_profile_option current_profile;
@@ -63,10 +65,15 @@ SPDX-License-Identifier: GPL-2.0-only
 +	struct work_struct stt_table_work;
 +	u32 stt_tables; /* BIOS STT tables sent since load */
 +	bool stt_table_fresh; /* a BIOS table landed since the override was last sent */
++	struct amd_pmf_fn_key {
++		struct amd_pmf_dev *pmf;
++		u32 key; /* its index in fn_key's "HML" */
++	} fn_keys[3];
++	u32 fn_key; /* Fn key presses since load << 2 | the index of the last key */
  	struct device *ppdev; /* platform profile class device */
  	struct dentry *dbgfs_dir;
  	int hb_interval; /* SBIOS heartbeat interval */
-@@ -1128,6 +1138,10 @@ int amd_pmf_init_cnqf(struct amd_pmf_dev *dev);
+@@ -1128,6 +1143,12 @@ int amd_pmf_init_cnqf(struct amd_pmf_dev *dev);
  void amd_pmf_deinit_cnqf(struct amd_pmf_dev *dev);
  int amd_pmf_trans_cnqf(struct amd_pmf_dev *dev, int socket_power, ktime_t time_lapsed_ms);
  extern const struct attribute_group cnqf_feature_attribute_group;
@@ -74,12 +81,14 @@ SPDX-License-Identifier: GPL-2.0-only
 +void amd_pmf_apply_stt_override(struct amd_pmf_dev *pmf);
 +void amd_pmf_init_stt_tables(struct amd_pmf_dev *pmf);
 +void amd_pmf_deinit_stt_tables(struct amd_pmf_dev *pmf);
++void amd_pmf_init_fn_keys(struct amd_pmf_dev *pmf);
++void amd_pmf_deinit_fn_keys(struct amd_pmf_dev *pmf);
  
  /* Smart PC builder Layer */
  int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev);
 --- a/drivers/platform/x86/amd/pmf/sps.c
 +++ b/drivers/platform/x86/amd/pmf/sps.c
-@@ -286,6 +286,251 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
+@@ -286,6 +286,313 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
  	return pmf->current_profile == PLATFORM_PROFILE_BALANCED;
  }
  
@@ -300,6 +309,67 @@ SPDX-License-Identifier: GPL-2.0-only
 +}
 +static DEVICE_ATTR_RO(stt_tables);
 +
++/* drivers/acpi/internal.h, which out-of-tree modules do not see; the symbols are exported. */
++struct acpi_ec;
++typedef int (*acpi_ec_query_func)(void *data);
++extern struct acpi_ec *first_ec;
++int acpi_ec_add_query_handler(struct acpi_ec *ec, u8 query_bit, acpi_handle handle,
++			      acpi_ec_query_func func, void *data);
++void acpi_ec_remove_query_handler(struct acpi_ec *ec, u8 query_bit);
++
++/*
++ * The EC queries of Fn+H, Fn+M and Fn+L. Their _Q6D, _Q6E and _Q6F only send
++ * DYTC a PSC mode that DCSE maps to one table whatever the key, the balanced
++ * one with lap mode off: a handler added later is found first, so these
++ * replace them, and fn_key counts the key for the service to set the profile.
++ */
++static const u8 fn_queries[] = { 0x6d, 0x6e, 0x6f };
++
++static int amd_pmf_fn_key(void *data)
++{
++	struct amd_pmf_fn_key *fn = data;
++	struct amd_pmf_dev *pmf = fn->pmf;
++	u32 old = READ_ONCE(pmf->fn_key);
++
++	/* The EC runs its query handlers concurrently. */
++	while (!try_cmpxchg(&pmf->fn_key, &old, ((old & ~3u) + 4) | fn->key))
++		;
++	sysfs_notify(&pmf->dev->kobj, NULL, "fn_key");
++	return 0;
++}
++
++void amd_pmf_init_fn_keys(struct amd_pmf_dev *pmf)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(fn_queries); i++) {
++		pmf->fn_keys[i].pmf = pmf;
++		pmf->fn_keys[i].key = i;
++		acpi_ec_add_query_handler(first_ec, fn_queries[i], NULL, amd_pmf_fn_key,
++					  &pmf->fn_keys[i]);
++	}
++}
++
++/* The firmware's own queries handle the keys again. */
++void amd_pmf_deinit_fn_keys(struct amd_pmf_dev *pmf)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(fn_queries); i++)
++		acpi_ec_remove_query_handler(first_ec, fn_queries[i]);
++}
++
++/* Fn key presses since the driver loaded, each notified, and the last key: H, M or L. */
++static ssize_t fn_key_show(struct device *dev,
++			   struct device_attribute *attr, char *buf)
++{
++	struct amd_pmf_dev *pdev = dev_get_drvdata(dev);
++	u32 key = READ_ONCE(pdev->fn_key);
++
++	return sysfs_emit(buf, "%u %c\n", key >> 2, "HML"[key & 3]);
++}
++static DEVICE_ATTR_RO(fn_key);
++
 +static umode_t sps_override_is_visible(struct kobject *kobj,
 +				       struct attribute *attr, int n)
 +{
@@ -320,6 +390,7 @@ SPDX-License-Identifier: GPL-2.0-only
 +	&dev_attr_power_limits.attr,
 +	&dev_attr_metrics.attr,
 +	&dev_attr_stt_tables.attr,
++	&dev_attr_fn_key.attr,
 +	NULL
 +};
 +
@@ -331,7 +402,7 @@ SPDX-License-Identifier: GPL-2.0-only
  static int amd_pmf_profile_get(struct device *dev,
  			       enum platform_profile_option *profile)
  {
-@@ -390,6 +635,8 @@ static int amd_pmf_profile_set(struct device *dev,
+@@ -390,6 +697,8 @@ static int amd_pmf_profile_set(struct device *dev,
  			return ret;
  	}
  

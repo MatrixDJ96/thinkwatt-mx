@@ -24,11 +24,13 @@ which sees the ones no event announces. Lap mode is cleared by writing 0 to dytc
 keeps its own opinion, so the clear is a remedy re-issued on every event, and the target follows the
 flip.
 
-The events come from inotify (Gio file monitors, no sysfs file held open: tuned-ppd takes the
-Fn key only when nobody has platform_profile open) and from the kernel uevent socket. A profile
-event is read once the burst is over: each change notifies twice, one per handler, and reading
-inside the burst opens the file at the moment tuned-ppd is deciding whether the change came from
-the kernel, which makes it read the value the handlers have not yet replaced and set that back.
+The events come from inotify (Gio file monitors, no sysfs file held open: tuned-ppd takes a profile
+change for the kernel's only when nobody has platform_profile open) and from the kernel uevent
+socket. The patched amd_pmf takes Fn+H, Fn+M and Fn+L from the firmware and counts them in fn_key;
+the service asks tuned-ppd for the profile each sets, as the applet does. A profile event is read
+once the burst is over: each change notifies twice, one per handler, and reading inside the burst
+opens the file at the moment tuned-ppd is deciding whether the change came from the kernel, which
+makes it read the value the handlers have not yet replaced and set that back.
 
 The fan is the one timer: Tctl sampled from k10temp every second, a decision on the peak of
 three samples, up at once and down with two degrees of hysteresis, the driver's fan watchdog
@@ -66,6 +68,8 @@ PROPERTIES = "org.freedesktop.DBus.Properties"
 POLKIT = "org.freedesktop.PolicyKit1"
 POLKIT_PATH = "/org/freedesktop/PolicyKit1/Authority"
 POLKIT_AUTHORITY = f"{POLKIT}.Authority"
+PPD = "net.hadess.PowerProfiles"
+PPD_PATH = "/net/hadess/PowerProfiles"
 
 INTROSPECTION = f"""
 <node>
@@ -90,6 +94,9 @@ PLATFORM_PROFILE = "/sys/firmware/acpi/platform_profile"
 PMF = "/sys/bus/platform/devices/AMDI0102:00"
 SKIN_TARGET = f"{PMF}/stt_skin_temp_apu"
 STT_TABLES = f"{PMF}/stt_tables"
+FN_KEY = f"{PMF}/fn_key"
+# tuned-ppd's names, not the platform's: low-power is its power-saver.
+FN_PROFILES = {"H": "performance", "M": "balanced", "L": "power-saver"}
 CPUFREQ = "/sys/devices/system/cpu/cpu*/cpufreq"
 CPU0 = "/sys/devices/system/cpu/cpu0/cpufreq"
 DRM = "/sys/class/drm/card*/device"
@@ -230,6 +237,7 @@ class Service:
         self.profile = read_attribute(PLATFORM_PROFILE)
         self.lapmode = False
         self.stt_tables = read_attribute(STT_TABLES)
+        self.fn_presses = read_attribute(FN_KEY).split()[0]
         self.profile_timer = None
         self.level = None
         self.samples = []
@@ -240,7 +248,7 @@ class Service:
         self.drm = os.path.dirname(glob.glob(f"{DRM}/gpu_busy_percent")[0])
         self.monitors = []
         for path, handler in ((LAPMODE, self.on_lapmode), (PLATFORM_PROFILE, self.on_profile),
-                              (STT_TABLES, self.on_stt_tables)):
+                              (STT_TABLES, self.on_stt_tables), (FN_KEY, self.on_fn_key)):
             monitor = Gio.File.new_for_path(path).monitor_file(Gio.FileMonitorFlags.NONE, None)
             monitor.connect("changed", handler)
             self.monitors.append(monitor)
@@ -352,6 +360,23 @@ class Service:
         self.stt_tables = tables
         log(f"firmware table {tables}")
         self.push_ceiling()
+
+    def on_fn_key(self, *_):
+        presses, key = read_attribute(FN_KEY).split()
+        if presses == self.fn_presses:
+            return
+        self.fn_presses = presses
+        profile = FN_PROFILES[key]
+        log(f"Fn+{key}: {profile}")
+        request = (PPD, "ActiveProfile", GLib.Variant("s", profile))
+        self.connection.call(PPD, PPD_PATH, PROPERTIES, "Set", GLib.Variant("(ssv)", request), None,
+                             Gio.DBusCallFlags.NONE, -1, None, self.on_profile_set, profile)
+
+    def on_profile_set(self, connection, result, profile):
+        try:
+            connection.call_finish(result)
+        except GLib.Error as error:
+            log(f"FAIL: {PPD} ActiveProfile <- {profile}: {error.message}")
 
     # A callback that raises is removed by GLib for good: every read here is guarded.
     def on_uevent(self, *_):
@@ -471,7 +496,7 @@ class Service:
     # Methods --------------------------------------------------------------------------------
 
     # CPU load is a difference, so the previous jiffy counters are kept between two calls; the
-    # first call has nothing to subtract and prints no key.
+    # first call has nothing to subtract and its figures carry no cpu_busy key.
     def cpu_busy(self):
         with open("/proc/stat") as handle:
             fields = [int(field) for field in handle.readline().split()[1:]]

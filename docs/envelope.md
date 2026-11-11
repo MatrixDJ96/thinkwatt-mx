@@ -63,6 +63,14 @@ table: the SMU moves it with the skin temperature. In `performance` it read 22 W
 passed the 37 °C target and 25.9 W right after a lap mode clear; with a raised target it rises
 to PPT fast, 43 W.
 
+Fn+H, Fn+M and Fn+L run `_Q6D`, `_Q6E` and `_Q6F`, which send PSC modes 7, 5 and 3; with lap
+mode off, `DCSE` maps every one to the `balanced` table 7/17. Left alone, Fn+H and Fn+M kept
+`platform_profile` at `performance` on PPT slow 25 W, and Fn+L left it `custom` (measured
+2026-11-11). The patched `amd_pmf` now takes the three keys from the firmware and the service
+asks `tuned-ppd` for the profile each sets ([`kernel.md`](kernel.md)): within a second of a key
+the profile's table lands, PPT slow 33, 25 or 10 W, and KDE and the applet follow, also for two
+keys inside one second (measured 2026-11-11).
+
 ## The firmware takes the target back
 
 The firmware sends a table again on several events: a profile change, a power-source change, a

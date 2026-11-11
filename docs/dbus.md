@@ -90,14 +90,14 @@ and start `thinkwatt-mx-update.service`, which is how the applet's update button
 | `platform_profile` changes | inotify, 500 ms settle | update `Profile`; outside `performance`, close `Ceiling` |
 | `AC` or `BAT0` uevent      | netlink uevent socket  | write the target again                                   |
 | `stt_tables` changes       | inotify                | log `firmware table <n>`, write the target again         |
+| `fn_key` counts a press    | inotify                | ask `tuned-ppd` for the key's profile                    |
 
-The firmware may overwrite the target on any of these events, so the service writes it again
+The firmware may overwrite the target on any of the first four, so the service writes it again
 after each one while `Ceiling` is set. `stt_tables` counts the tables themselves, including the
 ones no other event announces ([`kernel.md`](kernel.md)). The service does not write the target
 while lap mode reads `1`; the change back to `0` comes after the firmware's own write
 ([`lapmode.md`](lapmode.md)).
 
 The service never keeps a sysfs file open, and after its start it reads `platform_profile` only
-after 500 ms without notifications. `tuned-ppd` decides whether a profile change came from the
-Fn key by watching who opens that file. A read during its own write makes it restore the old
-profile.
+after 500 ms without notifications. `tuned-ppd` takes a profile change for the kernel's only
+when nobody has that file open. A read during its own write makes it restore the old profile.

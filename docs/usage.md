@@ -27,7 +27,9 @@ says so and its button updates the machine ([`install.md`](install.md#updating))
 drivers also put a warning icon in the panel and disable the **Service** button until the
 update.
 
-The Fn key still changes the profile. Leaving `performance` closes `performance+`.
+While the service runs, Fn+H, Fn+M and Fn+L set `performance`, `balanced` and `low-power`;
+while it is stopped and the patched drivers are loaded, they do nothing. Leaving `performance`
+closes `performance+`.
 
 ## Settings
 

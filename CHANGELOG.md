@@ -17,6 +17,7 @@ the design, so the same mistake is not made twice.
 | one `ryzenadj` caller is safe                              | it collided with the kernel's own writes on a charger change                                                       |
 | waiting 5 s after the last power event avoids collisions   | the next event can land during the call; nothing in userspace writes to the SMU now                                |
 | `DYTC_CMD_RESET` clears lap mode for 30 minutes            | it sends the `balanced` table, whose limits equal lap mode's outside `low-power`, and turns DYTC off               |
+| the Fn keys change the profile                             | the firmware sends one table for all three; `amd_pmf` takes the keys, the service asks `tuned-ppd`                 |
 | raising PPT slow above 33 W gives more power safely        | it holds the power but the skin keeps heating: the control loop is open                                            |
 
 ## Measurements
