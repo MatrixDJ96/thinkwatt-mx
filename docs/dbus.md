@@ -20,7 +20,7 @@ fan to the EC.
 | `Ceiling`  | `u`  | rw     | skin target in °C, `37` to `60`; `0` hands the target back |
 | `FanLevel` | `s`  | rw     | `curve` (at start), `auto`, `max`, `0` to `7`              |
 | `CpuMode`  | `s`  | rw     | `performance`, `balanced`, `powersave`                     |
-| `GpuMode`  | `s`  | rw     | `auto`, `low`, `high`, or a fixed clock level `0` to `2`   |
+| `GpuMode`  | `s`  | rw     | `auto`, `low` or `high`                                    |
 | `Profile`  | `s`  | ro     | the current `platform_profile`                             |
 | `LapMode`  | `b`  | ro     | the content of `dytc_lapmode`, as the service last read it |
 | `Version`  | `s`  | ro     | the package version of the running service                 |
@@ -48,8 +48,8 @@ prefixed with `io.github.matrixdj96.ThinkwattMX.`:
 | `Error.Failed`        | a sysfs read or write failed                               |
 | `Error.NotAuthorized` | polkit refused the caller                                  |
 
-A refused `Ceiling` keeps its value. `CpuMode` and `GpuMode` write several files in turn, and a
-failure leaves the ones before it written.
+A refused `Ceiling` keeps its value. `CpuMode` writes several files in turn, and a failure
+leaves the ones before it written.
 
 ## Methods
 

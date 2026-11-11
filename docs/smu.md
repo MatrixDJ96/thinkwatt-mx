@@ -51,7 +51,7 @@ under its own lock:
 | --------------- | --------------------------------------------------------------------- |
 | skin target     | `amd_pmf`'s `stt_skin_temp_apu` ([`kernel.md`](kernel.md))            |
 | limits, metrics | `amd_pmf`'s `power_limits` and `metrics`, read on demand              |
-| GPU level       | amdgpu's `power_dpm_force_performance_level` and `pp_dpm_sclk`        |
+| GPU level       | amdgpu's `power_dpm_force_performance_level`                          |
 | GPU readings    | amdgpu's `power1_average`, `freq1_input` and `temp1_input`, on demand |
 | fan loop        | Tctl from `k10temp`                                                   |
 

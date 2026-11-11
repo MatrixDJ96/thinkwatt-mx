@@ -101,7 +101,7 @@ CEILING_RANGE = range(37, 61)
 # `auto` is the EC's own control, `curve` the loop's.
 FAN_LEVELS = ("curve", "auto", "max", *"01234567")
 CPU_MODES = ("performance", "balanced", "powersave")
-GPU_MODES = ("auto", "low", "high", *"012")
+GPU_MODES = ("auto", "low", "high")
 # Milliseconds of quiet after a platform_profile notification before the file is read.
 PROFILE_SETTLE = 500
 # linux/netlink.h; the socket module does not name it. Group 1 is the kernel's own broadcast.
@@ -410,13 +410,7 @@ class Service:
         return f"{governor}/{epp}"
 
     def gpu_mode(self):
-        level = read_attribute(f"{self.drm}/power_dpm_force_performance_level")
-        if level != "manual":
-            return level
-        for line in read_attribute(f"{self.drm}/pp_dpm_sclk").splitlines():
-            if line.endswith("*"):
-                return line.split(":")[0]
-        return level
+        return read_attribute(f"{self.drm}/power_dpm_force_performance_level")
 
     def properties(self):
         return {
@@ -464,14 +458,8 @@ class Service:
 
     def set_gpu_mode(self, value):
         if value not in GPU_MODES:
-            raise Refused(ERROR_INVALID_VALUE,
-                          f"GpuMode must be auto, low, high or 0..2, not {value}")
-        level = f"{self.drm}/power_dpm_force_performance_level"
-        if value in ("0", "1", "2"):
-            write_attribute(level, "manual")
-            write_attribute(f"{self.drm}/pp_dpm_sclk", value)
-            return
-        write_attribute(level, value)
+            raise Refused(ERROR_INVALID_VALUE, f"GpuMode must be auto, low or high, not {value}")
+        write_attribute(f"{self.drm}/power_dpm_force_performance_level", value)
 
     def set_property(self, name, value):
         # GDBus has already refused a name, a type or an access the introspection denies.
