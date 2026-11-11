@@ -83,8 +83,8 @@ PlasmoidItem {
         }
     }
 
-    // The daemon answers within a second; an intent older than that is a write that did not
-    // land, and it must not open the ceiling the next time the Fn key reaches performance.
+    // The daemon answers within a second; an intent still unmet after 3 s is a write that did not
+    // land, and it must not open the ceiling the next time the profile reaches performance.
     Timer {
         id: ceilingIntent
 
@@ -497,12 +497,12 @@ PlasmoidItem {
     }
 
     // An unset or unknown separator is the default dot, never readings run together.
-    function panelSeparator() {
+    function panelSeparator(rich) {
         var symbol = Plasmoid.configuration.panelSeparator;
-        if (symbol === "space") {
-            return "\u2003";
-        }
-        return " " + (["·", "|", "/"].indexOf(symbol) >= 0 ? symbol : "·") + " ";
+        var middle = symbol === "space" ? " " : ["·", "|", "/"].indexOf(symbol) >= 0 ? symbol : "·";
+        var text = " " + middle + " ";
+        // StyledText collapses a run of spaces, no-break ones included; &nbsp; keeps each.
+        return rich ? text.replace(/ /g, "&nbsp;") : text;
     }
 
     function panelColor(key) {
@@ -528,7 +528,7 @@ PlasmoidItem {
             var colour = rich && !clamped ? panelColor(keys[i]) : "";
             parts.push(colour === "" ? text : "<font color=\"" + colour + "\">" + text + "</font>");
         }
-        return parts.length > 0 ? parts.join(panelSeparator()) : missing;
+        return parts.length > 0 ? parts.join(panelSeparator(rich)) : missing;
     }
 
     Plasmoid.status: clamped ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
