@@ -8,8 +8,9 @@ jobs:
   check:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
-    # The gates' tools as the supported platform ships them: Fedora's shfmt, ruff and xgettext
-    # are the versions the tree is checked and its catalogues are built with.
+    # The gates' tools as the supported platform ships them: Fedora's ShellCheck, ruff and
+    # xgettext. Fedora retired shfmt, so it comes from its latest GitHub release, which publishes
+    # no checksum file: the binary must report the tag it was downloaded from.
     container: fedora:latest
     strategy:
       fail-fast: false
@@ -25,7 +26,16 @@ jobs:
       - name: Install tools
         run: >-
           dnf install -y --setopt=install_weak_deps=False
-          ShellCheck shfmt ruff python3 python3-gobject gettext
+          ShellCheck ruff python3 python3-gobject gettext
+      - name: Install shfmt
+        run: |
+          tag=$(curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 -o /dev/null \
+            -w '%{url_effective}' https://github.com/mvdan/sh/releases/latest)
+          tag=${tag##*/}
+          curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 -o /usr/local/bin/shfmt \
+            "https://github.com/mvdan/sh/releases/download/$tag/shfmt_${tag}_linux_amd64"
+          chmod 0755 /usr/local/bin/shfmt
+          test "$(shfmt --version)" = "$tag"
       - name: Check out
         uses: actions/checkout@v5
       - name: ${{ matrix.step }}
