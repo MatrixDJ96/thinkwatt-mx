@@ -79,27 +79,7 @@ SPDX-License-Identifier: GPL-2.0-only
  int amd_pmf_init_smart_pc(struct amd_pmf_dev *dev);
 --- a/drivers/platform/x86/amd/pmf/sps.c
 +++ b/drivers/platform/x86/amd/pmf/sps.c
-@@ -198,7 +198,8 @@ static void amd_pmf_update_slider_v2(struct amd_pmf_dev *dev, int idx)
- 	amd_pmf_send_cmd(dev, SET_STT_MIN_LIMIT, SET_CMD,
- 			 apts_config_store.val[idx].stt_min_limit, NULL);
- 	amd_pmf_send_cmd(dev, SET_STT_LIMIT_APU, SET_CMD,
--			 fixp_q88_fromint(apts_config_store.val[idx].stt_skin_temp_limit_apu),
-+			 fixp_q88_fromint(dev->stt_apu_override ?:
-+					  apts_config_store.val[idx].stt_skin_temp_limit_apu),
- 			 NULL);
- 	amd_pmf_send_cmd(dev, SET_STT_LIMIT_HS2, SET_CMD,
- 			 fixp_q88_fromint(apts_config_store.val[idx].stt_skin_temp_limit_hs2),
-@@ -219,7 +220,8 @@ void amd_pmf_update_slider(struct amd_pmf_dev *dev, bool op, int idx,
- 		amd_pmf_send_cmd(dev, SET_STT_MIN_LIMIT, SET_CMD,
- 				 config_store.prop[src][idx].stt_min, NULL);
- 		amd_pmf_send_cmd(dev, SET_STT_LIMIT_APU, SET_CMD,
--				 fixp_q88_fromint(config_store.prop[src][idx].stt_skin_temp[STT_TEMP_APU]),
-+				 fixp_q88_fromint(dev->stt_apu_override ?:
-+						  config_store.prop[src][idx].stt_skin_temp[STT_TEMP_APU]),
- 				 NULL);
- 		amd_pmf_send_cmd(dev, SET_STT_LIMIT_HS2, SET_CMD,
- 				 fixp_q88_fromint(config_store.prop[src][idx].stt_skin_temp[STT_TEMP_HS2]),
-@@ -286,6 +288,258 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
+@@ -286,6 +286,251 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
  	return pmf->current_profile == PLATFORM_PROFILE_BALANCED;
  }
  
@@ -122,14 +102,12 @@ SPDX-License-Identifier: GPL-2.0-only
 +
 +/*
 + * The skin-temperature target the SMU holds the APU to, in degrees C. The BIOS
-+ * table gives one per profile and power source, pushed by the static slider
-+ * where the platform has it or by the SBIOS on the OS power slider update.
-+ * A non-zero value here is sent at once and again after every such push the
-+ * driver makes; 0 stops that and puts the table back at once: the static
-+ * slider's own value where the platform has one, otherwise the target of the
-+ * latest BIOS table, read from the SMU before the override went over it, since
-+ * the SBIOS does not push its table again for a slider position that has not
-+ * moved.
++ * table gives one per profile and power source, pushed by the SBIOS on the OS
++ * power slider update. A non-zero value here is sent at once and again after
++ * every such update the driver notifies; 0 stops that and puts back at once the
++ * target of the latest BIOS table, read from the SMU before the override went
++ * over it, since the SBIOS does not push its table again for a slider position
++ * that has not moved.
 + */
 +static ssize_t stt_skin_temp_apu_show(struct device *dev,
 +				      struct device_attribute *attr, char *buf)
@@ -164,11 +142,7 @@ SPDX-License-Identifier: GPL-2.0-only
 +		amd_pmf_apply_stt_override(pdev);
 +		return count;
 +	}
-+	if (is_apmf_func_supported(pdev, APMF_FUNC_STATIC_SLIDER_GRANULAR)) {
-+		err = amd_pmf_set_sps_power_limits(pdev);
-+		if (err)
-+			return err;
-+	} else if (pdev->stt_apu_table) {
++	if (pdev->stt_apu_table) {
 +		err = amd_pmf_send_cmd(pdev, SET_STT_LIMIT_APU, SET_CMD, pdev->stt_apu_table,
 +				       NULL);
 +		if (err)
@@ -331,8 +305,7 @@ SPDX-License-Identifier: GPL-2.0-only
 +{
 +	struct amd_pmf_dev *pdev = dev_get_drvdata(kobj_to_dev(kobj));
 +
-+	if (!is_apmf_func_supported(pdev, APMF_FUNC_STATIC_SLIDER_GRANULAR) &&
-+	    !is_apmf_func_supported(pdev, APMF_FUNC_OS_POWER_SLIDER_UPDATE))
++	if (!is_apmf_func_supported(pdev, APMF_FUNC_OS_POWER_SLIDER_UPDATE))
 +		return 0;
 +	/* The GET commands and the V1 metrics table exist on the V1 interface only. */
 +	if ((attr == &dev_attr_power_limits.attr || attr == &dev_attr_metrics.attr) &&
@@ -358,7 +331,7 @@ SPDX-License-Identifier: GPL-2.0-only
  static int amd_pmf_profile_get(struct device *dev,
  			       enum platform_profile_option *profile)
  {
-@@ -390,6 +644,8 @@ static int amd_pmf_profile_set(struct device *dev,
+@@ -390,6 +635,8 @@ static int amd_pmf_profile_set(struct device *dev,
  			return ret;
  	}
  

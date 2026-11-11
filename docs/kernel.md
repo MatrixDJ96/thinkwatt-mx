@@ -37,12 +37,12 @@ each run of `\_SB.PCI0.LPC0.EC0.HKEY.DSTT` start and end. At the end the table i
 `stt_tables` counts one and notifies its readers, and inotify sees the change. The probes
 compare two pointers and touch no mailbox.
 
-Writing `0` puts back the BIOS table's target. On the static slider that is the slider's value.
-Otherwise, on the V1 interface, it is the target of the latest BIOS table the override went
-over: before the driver sends the override over a table that has landed since its last send, it
-reads the SMU's target. The BIOS does not send its table again for an unchanged slider, so the
-driver keeps that value. A table that lands after the last send, such as the lap mode table
-while the service holds off, is not read, and `0` puts back the target from before it.
+Writing `0` puts back the BIOS table's target. On the V1 interface it is the target of the
+latest BIOS table the override went over: before the driver sends the override over a table
+that has landed since its last send, it reads the SMU's target. The BIOS does not send its
+table again for an unchanged slider, so the driver keeps that value. A table that lands after
+the last send, such as the lap mode table while the service holds off, is not read, and `0`
+puts back the target from before it.
 
 ## `thinkpad_acpi`: lap mode
 
