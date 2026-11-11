@@ -43,6 +43,7 @@ service runs takes its events with it, and `systemctl restart thinkwatt-mx` re-a
 
 import glob
 import os
+import stat
 import signal
 import socket
 import sys
@@ -581,10 +582,15 @@ class Service:
 
 def main():
     if os.geteuid() != 0:
+    # Root passes os.access whatever the mode: a stock driver shows in the owner's write bit.
         log("FAIL: root required")
         return 1
     for path in (SKIN_TARGET, LAPMODE):
-        if not os.access(path, os.W_OK):
+        try:
+            writable = os.stat(path).st_mode & stat.S_IWUSR
+        except OSError:
+            writable = 0
+        if not writable:
             log(f"FAIL: {path} is not writable: the patched drivers are not loaded "
                 "(thinkwatt-mx-kmods)")
             return 1
