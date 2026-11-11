@@ -9,6 +9,7 @@ the design, so the same mistake is not made twice.
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | a written skin target stays in force                       | the firmware sends its table again and the target falls back to 37 °C; the service rewrites it on events           |
 | the service's events announce every firmware table         | a table came with no event and the target stayed at 37 °C; `amd_pmf` now counts every `DSTT`                       |
+| no firmware table allows more than 22 W of STAPM           | parameter `0x2E` is the STT minimum, STAPM's floor; STAPM read 25.9 W under the stock table after a lap mode clear |
 | `amd_pmf` sends the limits on this machine                 | this BIOS uses the OS power slider: `amd_pmf` only notifies, the DSDT sends the table                              |
 | after a release the firmware restores its target by itself | at rest it did not for ten minutes; the patched driver restores it when `0` is written                             |
 | writing `0` puts back the table in force                   | after a profile change it put back 37 °C in `balanced`; the driver now reads the target of each table it overrides |

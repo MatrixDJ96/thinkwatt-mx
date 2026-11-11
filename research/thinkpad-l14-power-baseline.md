@@ -43,11 +43,11 @@ the chassis it starts from, which is why one leg alone never carries a percentag
 
 ## What binds
 
-Sustained power in `performance` pins to 22.000 W, exactly the stock STAPM limit — that is the
-binding constraint, not the 37 °C skin-temperature target. Tctl settles at 65 °C, far from the
-97 °C core limit, and the EC holds ~3245 rpm across all three legs, so its fan table is a
-constant over this range and was calibrated for the 22 W envelope: at a forced 35 W it never
-ramps while Tctl climbs past 86 °C without settling.
+Sustained power in `performance` pins to 22.000 W: the skin is past the 37 °C target, so STAPM
+sits at the table's STT minimum. Tctl settles at 65 °C, far from the 97 °C core limit, and the
+EC holds ~3245 rpm across all three legs, so its fan table is a constant over this range and
+was calibrated for the 22 W envelope: at a forced 35 W it never ramps while Tctl climbs past 86
+°C without settling.
 
 ## Traps that invalidate a measurement
 
@@ -109,23 +109,23 @@ afternoon's sessions with `Disable`. It cleared on its own after roughly twenty 
 
 The DSDT carries `STTS`, 20 Skin Temperature Tracking tables of 12 SMU parameters each, written
 into the SMU by `DSTT(n)`. Parameter `0x22` is the skin limit in 8.8 fixed point; `0x2E`,
-`0x06` and `0x07` are STAPM, PPT fast and PPT slow in milliwatts. Every value measured on this
-machine is one of these bytes:
+`0x06` and `0x07` are the STT minimum, PPT fast and PPT slow in milliwatts. Every value
+measured on this machine is one of these bytes:
 
-| table  | skin      | STAPM | fast | slow | profile              |
-| ------ | --------- | ----- | ---- | ---- | -------------------- |
-| 6 / 16 | 28 C      | 10 W  | 10   | 10   | low-power            |
-| 3 / 13 | 31 C      | 14 W  | 30   | 25   | lapmode, performance |
-| 8 / 18 | 37 C      | 22 W  | 43   | 33   | performance          |
-| 7 / 17 | 31 / 33 C | 14 W  | 30   | 25   | balanced             |
-| 4 / 14 | 0 C       | 6 W   | 6    | 6    | emergency            |
+| table  | skin      | STT min | fast | slow | profile              |
+| ------ | --------- | ------- | ---- | ---- | -------------------- |
+| 6 / 16 | 28 C      | 10 W    | 10   | 10   | low-power            |
+| 3 / 13 | 31 C      | 14 W    | 30   | 25   | lapmode, performance |
+| 8 / 18 | 37 C      | 22 W    | 43   | 33   | performance          |
+| 7 / 17 | 31 / 33 C | 14 W    | 30   | 25   | balanced             |
+| 4 / 14 | 0 C       | 6 W     | 6    | 6    | emergency            |
 
-**No table in the firmware exceeds 22 W STAPM.** A more generous envelope is not hidden behind
-a setting — it does not exist. The forced 35 W of the first table came from `ryzenadj` writing
-the limits directly, open loop, and is not a lever (`CHANGELOG.md`): the raised envelope is a
-skin target written into the patched driver (`docs/kernel.md`). In performance and balanced,
-lapmode uses balanced's power, which is why a clamped machine behaves exactly like balanced
-while reporting `performance`.
+**No table in the firmware sets STAPM.** The SMU derives it from the skin target, between the
+STT minimum and PPT fast; no setting hides a more generous table. The forced 35 W of the first
+table came from `ryzenadj` writing the limits directly, open loop, and is not a lever
+(`CHANGELOG.md`): the raised envelope is a skin target written into the patched driver
+(`docs/kernel.md`). In performance and balanced, lapmode uses balanced's power, which is why a
+clamped machine behaves exactly like balanced while reporting `performance`.
 
 The only branch selecting between the two halves is `RFIO(0x0B)`, which reads bit 16 of the FCH
 GPIO register at `0xFED81500 + (n << 2)` — a physical pin, not a BIOS setting. The halves are

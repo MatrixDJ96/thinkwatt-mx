@@ -1,9 +1,9 @@
 # Lap mode
 
 When `/sys/devices/platform/thinkpad_acpi/dytc_lapmode` reads `1`, the firmware applies its lap
-mode table. In `performance` and `balanced` that is STAPM 14 W, PPT fast 30 W, PPT slow 25 W,
-skin target 31 °C, the `balanced` limits; in `low-power` it is 31 °C with 10 W for all three
-limits. `platform_profile` keeps reading the profile in force, and writing it again does not
+mode table. In `performance` and `balanced` that is STT minimum 14 W, PPT fast 30 W, PPT slow
+25 W, skin target 31 °C, the `balanced` limits; in `low-power` it is 31 °C with 10 W for all
+three. `platform_profile` keeps reading the profile in force, and writing it again does not
 lift the cap.
 
 ## How the EC sets it

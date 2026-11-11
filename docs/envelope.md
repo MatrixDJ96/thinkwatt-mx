@@ -46,19 +46,22 @@ settles, and 33 W is where it settles. ThinkWatt MX therefore changes the target
 ## The firmware tables
 
 The DSDT holds `STTS`, twenty tables of twelve SMU parameters. `DSTT(n)` sends one table to the
-SMU through ALIB. Parameter `0x22` is the skin target; `0x2E`, `0x06` and `0x07` are STAPM, PPT
-fast and PPT slow. Each value measured on this machine is one of these entries:
+SMU through ALIB. Parameter `0x22` is the skin target; `0x2E`, `0x06` and `0x07` are the STT
+minimum, PPT fast and PPT slow. The STT minimum is the floor the SMU can lower STAPM to. Each
+value measured on this machine is one of these entries:
 
-| tables | skin      | STAPM | PPT fast | PPT slow | used for                |
-| ------ | --------- | ----- | -------- | -------- | ----------------------- |
-| 6, 16  | 28 °C     | 10 W  | 10 W     | 10 W     | low-power               |
-| 3, 13  | 31 °C     | 14 W  | 30 W     | 25 W     | lap mode in performance |
-| 8, 18  | 37 °C     | 22 W  | 43 W     | 33 W     | performance             |
-| 7, 17  | 31, 33 °C | 14 W  | 30 W     | 25 W     | balanced                |
-| 4, 14  | not sent  | 6 W   | 6 W      | 6 W      | emergency               |
+| tables | skin      | STT min | PPT fast | PPT slow | used for                |
+| ------ | --------- | ------- | -------- | -------- | ----------------------- |
+| 6, 16  | 28 °C     | 10 W    | 10 W     | 10 W     | low-power               |
+| 3, 13  | 31 °C     | 14 W    | 30 W     | 25 W     | lap mode in performance |
+| 8, 18  | 37 °C     | 22 W    | 43 W     | 33 W     | performance             |
+| 7, 17  | 31, 33 °C | 14 W    | 30 W     | 25 W     | balanced                |
+| 4, 14  | not sent  | 6 W     | 6 W      | 6 W      | emergency               |
 
-`DSTT` skips a zero entry, so tables 4 and 14 leave the skin target as it was. No table allows
-more than 22 W of STAPM, so no BIOS option gives more.
+`DSTT` skips a zero entry, so tables 4 and 14 leave the skin target as it was. STAPM is in no
+table: the SMU moves it with the skin temperature. In `performance` it read 22 W once the skin
+passed the 37 °C target and 25.9 W right after a lap mode clear; with a raised target it rises
+to PPT fast, 43 W.
 
 ## The firmware takes the target back
 
