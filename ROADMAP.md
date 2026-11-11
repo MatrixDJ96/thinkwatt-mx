@@ -6,10 +6,15 @@
   `0`; what the register holds is unknown. `_Q40` sends one on a thermal status change. The
   service writes the target back after each table. A `firmware table` log line with no event
   beside it gives the time of a table no event announces, from either query or another path
-  ([`docs/envelope.md`](docs/envelope.md)).
+  ([`docs/envelope.md`](docs/envelope.md)). One came 60 s after the lid closed with the system
+  left awake (2026-11-11).
 - **Suspend.** The lid sends no table in the DSDT, and this machine suspends to `s2idle`, which
   runs no `_WAK`. Whether the SMU keeps the target across an `s2idle` resume has not been
   checked. A resume from hibernation runs `_WAK`, which sends tables through `DYTC`.
+- **Firmware tables unseen.** On the boot before 2026-11-11, with the patched drivers loaded,
+  the service logged its last firmware table on 2026-11-05; none followed until the shutdown on
+  2026-11-11, through battery events, an `s2idle` suspend and three lap mode flips. The cause
+  is not known; the counter is to be watched across a resume with the suspend item.
 - **The EC's lap mode criterion.** Reading EC register `0xC4` when lap mode appears needs a
   tool this kernel lacks: no `ec_sys`, no `/sys/kernel/debug/ec`. The kernel exports `ec_read`,
   so the patched `thinkpad_acpi` could expose the register read-only, and `DYTC(0x02)` with it,
