@@ -51,6 +51,11 @@ if [ "$SERIES" != 7.2 ]; then
     SOURCES[amd_pmf]+=" metrics.c"
     AMD_PMF_OBJECTS+=" metrics.o"
 fi
+# OGC turned this on in 7.3.4-ogc6: core.c then calls util.c's character device.
+if grep -qsx 'CONFIG_AMD_PMF_UTIL_SUPPORT=y' "$KDIR/.config"; then
+    SOURCES[amd_pmf]+=" util.c"
+    AMD_PMF_OBJECTS+=" util.o"
+fi
 readonly AMD_PMF_OBJECTS
 
 fail() {
